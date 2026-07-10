@@ -7,7 +7,7 @@ from top Lichess blitz players — no human in the loop.
 
 ## How it works
 
-Every ~6 hours, a GitHub Actions run:
+On a schedule, a GitHub Actions run:
 
 1. **Ingests** fresh rated blitz/rapid games from a rotating pool of strong Lichess
    players (via the public Lichess API, cursored so no game is ever seen twice)
