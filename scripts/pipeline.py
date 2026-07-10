@@ -116,7 +116,10 @@ def main() -> None:
         )
 
     if last_train is None:
-        print("no data this run; exiting")
+        # No new games this run: the ingest cursor still advanced, so commit
+        # that so the working tree is clean for the workflow's push step.
+        print("no new games this run; committing cursor advance")
+        git_commit("data: advance ingest cursor (no new games this run)", args.no_commit)
         return
 
     acc = move_accuracy(model, *holdout)

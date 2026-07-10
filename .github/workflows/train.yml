@@ -55,7 +55,12 @@ jobs:
           fi
 
       - name: Push commits
-        run: git pull --rebase && git push
+        run: |
+          # safety net: never let a stray uncommitted file block the rebase
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: commit residual run artifacts"
+          git pull --rebase
+          git push
 
       - name: Publish checkpoint
         env:
