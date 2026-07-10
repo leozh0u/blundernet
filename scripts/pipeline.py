@@ -21,6 +21,8 @@ LATEST = METRICS_DIR / "latest.json"
 FIELDS = [
     "timestamp", "steps", "samples_seen", "games", "positions",
     "loss", "policy_loss", "value_loss", "top1", "top3",
+    "puzzle_overall", "puzzle_800-1200", "puzzle_1200-1600",
+    "puzzle_1600-2000", "puzzle_2000-2400", "puzzle_2400-+",
 ]
 
 
@@ -52,13 +54,26 @@ def make_chart() -> None:
     if len(rows) < 2:
         return
     steps = [int(r["steps"]) for r in rows]
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    axes[0].plot(steps, [float(r["loss"]) for r in rows], label="total")
-    axes[0].plot(steps, [float(r["policy_loss"]) for r in rows], label="policy")
+
+    def col(name):
+        return [float(r[name]) if r.get(name) else float("nan") for r in rows]
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
+    axes[0].plot(steps, col("loss"), label="total")
+    axes[0].plot(steps, col("policy_loss"), label="policy")
     axes[0].set_title("training loss"); axes[0].set_xlabel("optimizer steps"); axes[0].legend()
-    axes[1].plot(steps, [100 * float(r["top1"]) for r in rows], label="top-1")
-    axes[1].plot(steps, [100 * float(r["top3"]) for r in rows], label="top-3")
+
+    axes[1].plot(steps, [100 * v for v in col("top1")], label="top-1")
+    axes[1].plot(steps, [100 * v for v in col("top3")], label="top-3")
     axes[1].set_title("held-out move prediction (%)"); axes[1].set_xlabel("optimizer steps"); axes[1].legend()
+
+    for b in ("puzzle_800-1200", "puzzle_1200-1600", "puzzle_1600-2000",
+              "puzzle_2000-2400", "puzzle_2400-+"):
+        axes[2].plot(steps, [100 * v for v in col(b)], label=b.replace("puzzle_", ""))
+    axes[2].plot(steps, [100 * v for v in col("puzzle_overall")], "k--", lw=2, label="overall")
+    axes[2].set_title("tactics puzzle accuracy by rating (%)")
+    axes[2].set_xlabel("optimizer steps"); axes[2].legend(fontsize=8)
+
     fig.tight_layout()
     fig.savefig(METRICS_DIR / "curve.png", dpi=110)
     print("chart updated")
@@ -72,6 +87,7 @@ def main() -> None:
 
     from blundernet.data import gather_batch
     from blundernet.evaluate import move_accuracy
+    from blundernet.puzzles import evaluate_puzzles
     from blundernet.train import load_model, save_model, train_on_batch
 
     model, opt, meta = load_model()
@@ -111,13 +127,30 @@ def main() -> None:
         "positions": last_summary["positions"],
         **{k: round(acc[k], 4) for k in ("top1", "top3")},
     }
-    append_history(row)
+    METRICS_DIR.mkdir(exist_ok=True)
     LATEST.write_text(json.dumps({**row, **acc}, indent=2) + "\n")
     git_commit(
         f"eval: top-1 {acc['top1']:.1%} / top-3 {acc['top3']:.1%} "
         f"on {acc['eval_positions']} held-out positions",
         args.no_commit,
     )
+
+    # tactics puzzle suite (fixed, bucketed by difficulty)
+    puz = evaluate_puzzles(model)
+    row.update(puz)
+    append_history(row)
+    LATEST.write_text(json.dumps({**row, **acc}, indent=2) + "\n")
+    if puz:
+        by_bucket = " ".join(
+            f"{k.replace('puzzle_', '')}:{v:.0%}"
+            for k, v in puz.items()
+            if k.startswith("puzzle_") and k not in ("puzzle_overall", "puzzle_n")
+        )
+        git_commit(
+            f"puzzles: {puz['puzzle_overall']:.1%} overall on {puz['puzzle_n']} "
+            f"tactics  [{by_bucket}]",
+            args.no_commit,
+        )
 
     if args.chart:
         make_chart()

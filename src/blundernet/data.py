@@ -21,7 +21,7 @@ API = "https://lichess.org/api/games/user/{user}"
 PLAYERS = [
     "penguingim1", "nihalsarin2004", "RebeccaHarris", "Zhigalko_Sergei",
     "Vladimirovich9000", "may6enexttime", "Night-King96", "Chesstoday",
-    "IWANNABEADOORED", "Arka50", "muisback", "HomayooToloei",
+    "IWANNABEADOORED", "Arka50", "muisback", "Msb2",
 ]
 
 STATE_PATH = Path("data/state.json")
