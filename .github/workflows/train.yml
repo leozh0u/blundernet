@@ -1,0 +1,68 @@
+name: train
+
+on:
+  schedule:
+    # 4 runs/day (UTC), off-beat minutes; each run makes 2-4 commits
+    - cron: "23 2 * * *"
+    - cron: "41 8 * * *"
+    - cron: "17 14 * * *"
+    - cron: "53 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Restore latest checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p checkpoint
+          gh release download model-latest --pattern model.pt --dir checkpoint || echo "no checkpoint yet, cold start"
+
+      - name: Configure git author
+        run: |
+          git config user.name "Leo Zhou"
+          git config user.email "zhouleo2007@gmail.com"
+
+      - name: Run training pipeline
+        run: |
+          # refresh the chart once a day, on the first run (02:xx UTC)
+          if [ "$(date -u +%H)" -lt 6 ]; then
+            python scripts/pipeline.py --chart
+          else
+            python scripts/pipeline.py
+          fi
+
+      - name: Push commits
+        run: git pull --rebase && git push
+
+      - name: Publish checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f checkpoint/model.pt ]; then
+            gh release create model-latest --title "rolling checkpoint" \
+              --notes "auto-updated by the training pipeline" 2>/dev/null || true
+            gh release upload model-latest checkpoint/model.pt --clobber
+          fi

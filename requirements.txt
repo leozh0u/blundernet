@@ -1,0 +1,5 @@
+torch>=2.3
+numpy
+python-chess>=1.10
+requests
+matplotlib
