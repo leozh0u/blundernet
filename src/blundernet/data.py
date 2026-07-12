@@ -17,12 +17,25 @@ from .encode import encode_board, move_to_index
 
 API = "https://lichess.org/api/games/user/{user}"
 
-# Strong, high-volume blitz players (rotating pool keeps data fresh & diverse)
-PLAYERS = [
+# Fallback pool if the leaderboard fetch fails (strong, high-volume players)
+FALLBACK_PLAYERS = [
     "penguingim1", "nihalsarin2004", "RebeccaHarris", "Zhigalko_Sergei",
     "Vladimirovich9000", "may6enexttime", "Night-King96", "Chesstoday",
     "IWANNABEADOORED", "Arka50", "muisback", "Msb2",
 ]
+
+
+def get_players() -> list[str]:
+    """Current top-50 blitz leaderboard — active players by construction."""
+    try:
+        r = requests.get("https://lichess.org/api/player/top/50/blitz",
+                         headers={"Accept": "application/vnd.lichess.v3+json"},
+                         timeout=30)
+        r.raise_for_status()
+        users = [u["username"] for u in r.json()["users"]]
+        return users if len(users) >= 10 else FALLBACK_PLAYERS
+    except (requests.RequestException, KeyError, ValueError):
+        return FALLBACK_PLAYERS
 
 STATE_PATH = Path("data/state.json")
 RESULT_VALUE = {"1-0": 1.0, "0-1": -1.0, "1/2-1/2": 0.0}
@@ -91,19 +104,23 @@ def pgn_to_samples(pgn_text: str, seen_ids: set | None = None,
     yield None, n_games, None  # sentinel carrying game count
 
 
-def gather_batch(n_players: int = 3, max_games: int = 60):
-    """Fetch fresh games from the next n_players in rotation.
-
-    Returns (X, policy, value, summary_dict).
+def gather_batch(n_players: int = 3, max_games: int = 100,
+                 min_positions: int = 2000, max_players: int = 8):
+    """Fetch fresh games, walking the player rotation until the batch has at
+    least min_positions (or max_players tried). Returns (X, policy, value, summary).
     """
     state = load_state()
+    players = get_players()
     seen_ids = set(state.get("seen_ids", []))
     xs, ps, vs = [], [], []
     used, games_total = [], 0
     now_ms = int(time.time() * 1000)
 
-    for i in range(n_players):
-        user = PLAYERS[(state["rotation"] + i) % len(PLAYERS)]
+    i = -1
+    while (i := i + 1) < max_players:
+        if i >= n_players and len(xs) >= min_positions:
+            break
+        user = players[(state["rotation"] + i) % len(players)]
         since = state["cursor"].get(user)
         try:
             pgn = fetch_games(user, since, max_games)
@@ -126,7 +143,7 @@ def gather_batch(n_players: int = 3, max_games: int = 60):
         used.append({"player": user, "games": n_games})
         time.sleep(1)  # be polite to the API
 
-    state["rotation"] = (state["rotation"] + n_players) % len(PLAYERS)
+    state["rotation"] = (state["rotation"] + i) % len(players)
     state["seen_ids"] = sorted(seen_ids)[-20000:]  # cap state file size
     state["total_games"] += games_total
     state["total_positions"] += len(xs)

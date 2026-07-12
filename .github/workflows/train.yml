@@ -2,10 +2,11 @@ name: train
 
 on:
   schedule:
-    # 4 runs/day (UTC), off-beat minutes; each run makes 2-4 commits
+    # 5 runs/day (UTC), off-beat minutes; each run makes 2-5 commits
     - cron: "23 2 * * *"
-    - cron: "41 8 * * *"
-    - cron: "17 14 * * *"
+    - cron: "37 6 * * *"
+    - cron: "41 10 * * *"
+    - cron: "17 15 * * *"
     - cron: "53 20 * * *"
   workflow_dispatch:
 
