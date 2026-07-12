@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-07-12T16:42:27+00:00",
+  "steps": 145,
+  "sims": 64,
+  "games_per_level": 4,
+  "levels": {
+    "0": {
+      "wins": 0,
+      "draws": 1,
+      "losses": 3,
+      "games": 4,
+      "score": 0.125,
+      "elo_diff": -338.0,
+      "sf_level": 0,
+      "sf_elo_anchor": 1320,
+      "implied_engine_elo": 982
+    }
+  },
+  "elo_estimate": 982
+}

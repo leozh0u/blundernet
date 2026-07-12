@@ -51,10 +51,12 @@ jobs:
 
       - name: Run training pipeline
         run: |
-          # first run of the day also refreshes the chart + strength gauntlet
+          # first run of the day also refreshes the chart + strength benchmarks
           if [ "$(date -u +%H)" -lt 6 ]; then
+            sudo apt-get install -y -q stockfish
             python scripts/pipeline.py --chart
             python scripts/gauntlet.py --games 12 --sims 64 --commit
+            python scripts/stockfish_bench.py --games 8 --sims 128 --levels 0 1 3 --commit
           else
             python scripts/pipeline.py
           fi
