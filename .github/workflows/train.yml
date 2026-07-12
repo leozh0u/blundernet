@@ -57,6 +57,7 @@ jobs:
             python scripts/pipeline.py --chart
             python scripts/gauntlet.py --games 12 --sims 64 --commit
             python scripts/stockfish_bench.py --games 8 --sims 128 --levels 0 1 3 --commit
+            python scripts/selfplay.py --games 2 --sims 96 --commit
           else
             python scripts/pipeline.py
           fi
