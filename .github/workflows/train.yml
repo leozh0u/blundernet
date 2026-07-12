@@ -47,9 +47,10 @@ jobs:
 
       - name: Run training pipeline
         run: |
-          # refresh the chart once a day, on the first run (02:xx UTC)
+          # first run of the day also refreshes the chart + strength gauntlet
           if [ "$(date -u +%H)" -lt 6 ]; then
             python scripts/pipeline.py --chart
+            python scripts/gauntlet.py --games 12 --sims 64 --commit
           else
             python scripts/pipeline.py
           fi

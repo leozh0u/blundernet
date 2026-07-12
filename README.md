@@ -40,6 +40,8 @@ python scripts/pipeline.py --no-commit
 ## Roadmap
 
 - [x] Lichess tactics-puzzle evaluation suite (accuracy vs puzzle rating buckets)
-- [ ] MCTS self-play wrapper so the net can actually play games
+- [x] PUCT MCTS search so the net can actually play games, + a baseline
+      gauntlet (random mover, material-greedy) with daily strength tracking
+- [ ] C++ MCTS core (pybind11) for deeper search at the same time budget
 - [ ] Estimate playing strength vs Stockfish skill levels
 - [ ] Elo-bucketed training: does the net mimic 1500s or 2800s?
