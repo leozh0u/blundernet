@@ -28,7 +28,12 @@ def main() -> None:
     args = ap.parse_args()
 
     from blundernet.arena import match, material_greedy, random_mover
-    from blundernet.mcts import best_move
+    from blundernet import mcts_cpp
+    if mcts_cpp.AVAILABLE:
+        from blundernet.mcts_cpp import best_move
+        print("using C++ batched MCTS core")
+    else:
+        from blundernet.mcts import best_move
     from blundernet.train import load_model
     from blundernet.encode import encode_board, move_to_index, legal_move_mask
     import chess

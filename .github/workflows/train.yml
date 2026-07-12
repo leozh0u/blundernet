@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
+      - name: Build C++ MCTS core
+        run: python cpp/setup.py build_ext --inplace
+
       - name: Restore latest checkpoint
         env:
           GH_TOKEN: ${{ github.token }}

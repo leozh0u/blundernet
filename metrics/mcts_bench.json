@@ -1,0 +1,32 @@
+{
+  "sims": 1000,
+  "batch": 32,
+  "steps": 145,
+  "positions": 6,
+  "python": {
+    "seconds": 4.63,
+    "sims_per_sec": 1295.4
+  },
+  "python_moves": [
+    "g1f3",
+    "b1c3",
+    "g1f3",
+    "h2h3",
+    "g2f3",
+    "g2g4"
+  ],
+  "cpp_batched": {
+    "seconds": 2.67,
+    "sims_per_sec": 2248.4
+  },
+  "cpp_batched_moves": [
+    "g1f3",
+    "b1c3",
+    "g1f3",
+    "h2h3",
+    "g2f3",
+    "a2a3"
+  ],
+  "move_agreement": "5/6",
+  "speedup": 1.74
+}

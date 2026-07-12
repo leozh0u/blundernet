@@ -3,3 +3,5 @@ numpy
 python-chess>=1.10
 requests
 matplotlib
+pybind11
+setuptools

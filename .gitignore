@@ -1,4 +1,6 @@
 checkpoint/
+build/
+*.so
 __pycache__/
 *.pyc
 .venv/
