@@ -96,6 +96,9 @@ data/             puzzle suite + ingest state
 .github/          the scheduled training workflow
 ```
 
+Design choices, tradeoffs, and the bugs worth remembering are in
+[DECISIONS.md](DECISIONS.md).
+
 ## Roadmap
 
 - [x] Continuous ingest/train/eval pipeline on scheduled CI
