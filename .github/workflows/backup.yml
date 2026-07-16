@@ -72,11 +72,7 @@ jobs:
 
       - name: Push commits
         if: steps.guard.outputs.run == 'true'
-        run: |
-          git add -A
-          git diff --cached --quiet || git commit -m "chore: commit residual run artifacts"
-          git pull --rebase
-          git push
+        run: bash scripts/ci_push.sh
 
       - name: Publish checkpoint
         if: steps.guard.outputs.run == 'true'
