@@ -1,0 +1,88 @@
+name: backup
+
+# Safety net for the primary `train` schedule. GitHub often delays scheduled
+# runs by hours and occasionally drops a whole day's slots under load. This
+# job fires later in the UTC day and runs the core pipeline ONLY if nothing
+# has been committed yet today, so on a normal day it is a cheap no-op and on
+# a bad day it still lands commits. It shares the `train` concurrency group,
+# so it never overlaps a primary run.
+
+on:
+  schedule:
+    - cron: "13 12 * * *"   # midday UTC: catch a failed morning
+    - cron: "9 23 * * *"    # late UTC: last resort before the day ends
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Skip if the day is already green
+        id: guard
+        run: |
+          today=$(date -u +%F)
+          last=$(TZ=UTC git log -1 --date=format-local:%F --format=%cd)
+          if [ "$last" = "$today" ]; then
+            echo "already committed today ($last); backup will no-op"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "no commit yet today (last=$last); backup will run"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.guard.outputs.run == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: steps.guard.outputs.run == 'true'
+        run: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Restore latest checkpoint
+        if: steps.guard.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p checkpoint
+          gh release download model-latest --pattern model.pt --dir checkpoint || echo "no checkpoint yet, cold start"
+
+      - name: Configure git author
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          git config user.name "Leo Zhou"
+          git config user.email "zhouleo2007@gmail.com"
+
+      - name: Run training pipeline
+        if: steps.guard.outputs.run == 'true'
+        run: python scripts/pipeline.py
+
+      - name: Push commits
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: commit residual run artifacts"
+          git pull --rebase
+          git push
+
+      - name: Publish checkpoint
+        if: steps.guard.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f checkpoint/model.pt ]; then
+            gh release upload model-latest checkpoint/model.pt --clobber
+          fi
