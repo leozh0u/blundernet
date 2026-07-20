@@ -51,13 +51,21 @@ jobs:
 
       - name: Run training pipeline
         run: |
-          # first run of the day also refreshes the chart + strength benchmarks
+          # First run of the day also refreshes the chart + strength benchmarks.
+          # The pipeline is load-bearing; the benchmarks are best-effort. A
+          # benchmark crash must not block the push of commits already made,
+          # so each one warns instead of failing the run.
           if [ "$(date -u +%H)" -lt 6 ]; then
-            sudo apt-get install -y -q stockfish
             python scripts/pipeline.py --chart
-            python scripts/gauntlet.py --games 12 --sims 64 --commit
-            python scripts/stockfish_bench.py --games 8 --sims 128 --levels 0 1 3 --commit
-            python scripts/selfplay.py --games 2 --sims 96 --commit
+            sudo apt-get install -y -q stockfish || echo "::warning::stockfish install failed; skipping anchor benchmark"
+            python scripts/gauntlet.py --games 12 --sims 64 --commit \
+              || echo "::warning::gauntlet failed this run"
+            if command -v stockfish >/dev/null; then
+              python scripts/stockfish_bench.py --games 8 --sims 128 --levels 0 1 3 --commit \
+                || echo "::warning::stockfish benchmark failed this run"
+            fi
+            python scripts/selfplay.py --games 2 --sims 96 --commit \
+              || echo "::warning::selfplay failed this run"
           else
             python scripts/pipeline.py
           fi
@@ -68,9 +76,4 @@ jobs:
       - name: Publish checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -f checkpoint/model.pt ]; then
-            gh release create model-latest --title "rolling checkpoint" \
-              --notes "auto-updated by the training pipeline" 2>/dev/null || true
-            gh release upload model-latest checkpoint/model.pt --clobber
-          fi
+        run: bash scripts/ci_release.sh

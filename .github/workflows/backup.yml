@@ -78,7 +78,4 @@ jobs:
         if: steps.guard.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -f checkpoint/model.pt ]; then
-            gh release upload model-latest checkpoint/model.pt --clobber
-          fi
+        run: bash scripts/ci_release.sh
