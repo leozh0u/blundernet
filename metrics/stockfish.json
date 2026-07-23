@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-07-22T05:34:13+00:00",
-  "steps": 2738,
+  "timestamp": "2026-07-23T05:38:49+00:00",
+  "steps": 2740,
   "sims": 128,
   "games_per_level": 8,
   "levels": {
@@ -17,14 +17,14 @@
     },
     "1": {
       "wins": 0,
-      "draws": 0,
-      "losses": 8,
+      "draws": 1,
+      "losses": 7,
       "games": 8,
-      "score": 0.0,
-      "elo_diff": -1199.8,
+      "score": 0.062,
+      "elo_diff": -470.4,
       "sf_level": 1,
       "sf_elo_anchor": 1470,
-      "implied_engine_elo": 270
+      "implied_engine_elo": 1000
     },
     "3": {
       "wins": 0,
@@ -38,5 +38,5 @@
       "implied_engine_elo": 540
     }
   },
-  "elo_estimate": null
+  "elo_estimate": 1000
 }
