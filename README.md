@@ -74,16 +74,45 @@ Games survive instance death because no instance owns a game: state lives in Red
 
 ## Load test
 
-`loadtest/game_flow.js` has each virtual user create a game, play an opening move, wait for the engine's reply, and resign. Ten users for 30 seconds on a MacBook against the local compose stack:
+`loadtest/game_flow.js` drives real games: create, subscribe over the same WebSocket a browser uses, play a move, wait for the engine's reply, resign. Move latency is measured from the move request to the reply arriving on the socket, so it covers the whole path rather than a polling interval.
+
+Two scenarios. `steady` holds a constant arrival rate to measure latency at a load the fleet can carry; `ramp` climbs past saturation to find the ceiling and give the worker autoscaling policy something to react to.
 
 ```
-http_reqs        1165 (37.2/s)     0 failed
-http_req_duration            p95 = 14.7 ms
-engine_reply_ms              p95 = 326 ms
-games completed  237, one worker process
+k6 run -e BASE=http://<alb-dns> -e SCENARIO=steady -e RATE=1.5 loadtest/game_flow.js
+k6 run -e BASE=http://<alb-dns> -e SCENARIO=ramp   -e PEAK=2   loadtest/game_flow.js
 ```
 
-The engine reply number is bounded by the test's own 300 ms polling interval; the inference itself is under a millisecond. The same script points at the ALB with `-e BASE=http://<alb-dns>`.
+### Results
+
+Measured against the Fargate stack in us-east-1: two api tasks, workers on 0.5 vCPU running 300-simulation MCTS, autoscaling from one to four tasks on queue depth.
+
+Steady, 1.5 games/s for three minutes, four workers:
+
+```
+engine move latency   p50 1.12 s   p95 1.25 s   p99 1.45 s
+moves answered        270 / 270
+http requests         810, zero failures
+```
+
+API latency, measured at the load balancer so it excludes client network time:
+
+```
+TargetResponseTime    p50 3.4 ms   p95 9.1 ms   p99 21-31 ms
+```
+
+Ramp to 2 games/s, roughly three times what a single worker sustains:
+
+```
+http requests         2700, zero failures, p99 496 ms (includes ~330 ms client RTT)
+engine move latency   p50 12 s, p99 58 s
+backlog               grew to 113 messages, drained to zero in ~90 s after scale-out
+workers               1 -> 4, triggered at t+467 s
+```
+
+Three things worth reading out of that. The API never failed or slowed under three times the load the engine could absorb, because nothing in the request path waits on inference: the queue takes the overflow and the cost lands on move latency instead of errors. Autoscaling did resolve the backlog, clearing 113 queued moves within about ninety seconds of the new tasks starting. But it took roughly five minutes to react at all, because SQS publishes queue depth once a minute and target tracking wants several breaching points before it moves. For a workload where a player is watching the board, that is too slow to be the only defence; provisioning closer to peak, or stepping on a shorter metric, would matter more than the scaling policy itself.
+
+The bottleneck is the engine, not the platform. Each move costs about 1.6 s of CPU on a 0.5 vCPU task, so one worker sustains roughly 0.6 moves/s and four sustain about 2.4. Raising simulations, task CPU, or batching leaf evaluations inside a search all move that number; none of them touch the API.
 
 ## Two deployments, on purpose
 

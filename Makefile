@@ -1,6 +1,6 @@
 # Local development ------------------------------------------------------
 
-.PHONY: test build up down e2e loadtest deploy destroy
+.PHONY: test build up down e2e loadtest deploy push destroy demo-deploy demo-update demo-destroy
 
 test:
 	go vet ./...
@@ -30,19 +30,29 @@ AWS_REGION ?= us-east-1
 TF = terraform -chdir=deploy/terraform
 
 deploy:
-	$(TF) init
-	$(TF) apply -auto-approve
-	$(eval ECR_API := $(shell $(TF) output -raw ecr_api))
-	$(eval ECR_WORKER := $(shell $(TF) output -raw ecr_worker))
-	aws ecr get-login-password --region $(AWS_REGION) | \
-		docker login --username AWS --password-stdin $(shell echo $(ECR_API) | cut -d/ -f1)
-	docker build --platform linux/amd64 --provenance=false --target api -t $(ECR_API):latest .
-	docker build --platform linux/amd64 --provenance=false --target worker -t $(ECR_WORKER):latest .
-	docker push $(ECR_API):latest
-	docker push $(ECR_WORKER):latest
+	$(TF) init -input=false
+	$(TF) apply -auto-approve -input=false
+	@$(MAKE) --no-print-directory push TF_DIR=deploy/terraform PLATFORM=linux/amd64
 	aws ecs update-service --region $(AWS_REGION) --cluster arena --service api --force-new-deployment > /dev/null
 	aws ecs update-service --region $(AWS_REGION) --cluster arena --service worker --force-new-deployment > /dev/null
-	@echo "live at: $$($(TF) output -raw url)"
+	@echo "live at: $$(terraform -chdir=deploy/terraform output -raw url)"
+
+# Build and push both images to whichever stack's ECR repos TF_DIR names.
+# Everything runs in one shell so the registry host is resolved at run
+# time; expanding it with make's $(shell ...) picks up an empty value
+# because the repos may not exist when the recipe is expanded.
+push:
+	@set -eu; \
+	api=$$(terraform -chdir=$(TF_DIR) output -raw ecr_api); \
+	worker=$$(terraform -chdir=$(TF_DIR) output -raw ecr_worker); \
+	registry=$${api%%/*}; \
+	echo "pushing to $$registry"; \
+	aws ecr get-login-password --region $(AWS_REGION) \
+		| docker login --username AWS --password-stdin "$$registry"; \
+	docker build --platform $(PLATFORM) --provenance=false --target api -t "$$api:latest" .; \
+	docker build --platform $(PLATFORM) --provenance=false --target worker -t "$$worker:latest" .; \
+	docker push "$$api:latest"; \
+	docker push "$$worker:latest"
 
 destroy:
 	$(TF) destroy -auto-approve
@@ -57,31 +67,20 @@ demo-deploy:
 	$(TFDEMO) init -input=false
 	$(TFDEMO) apply -auto-approve -input=false \
 		-target=aws_ecr_repository.api -target=aws_ecr_repository.worker -target=aws_sqs_queue.moves
-	$(eval ECR_API := $(shell $(TFDEMO) output -raw ecr_api))
-	$(eval ECR_WORKER := $(shell $(TFDEMO) output -raw ecr_worker))
-	aws ecr get-login-password --region $(AWS_REGION) | \
-		docker login --username AWS --password-stdin $(shell echo $(ECR_API) | cut -d/ -f1)
-	docker build --platform linux/arm64 --provenance=false --target api -t $(ECR_API):latest .
-	docker build --platform linux/arm64 --provenance=false --target worker -t $(ECR_WORKER):latest .
-	docker push $(ECR_API):latest
-	docker push $(ECR_WORKER):latest
+	@$(MAKE) --no-print-directory push TF_DIR=deploy/demo PLATFORM=linux/arm64
 	$(TFDEMO) apply -auto-approve -input=false
 	@echo "demo live at: $$($(TFDEMO) output -raw url)"
 
 # Ship new code to the running demo box without recreating it.
 demo-update:
-	$(eval ECR_API := $(shell $(TFDEMO) output -raw ecr_api))
-	$(eval ECR_WORKER := $(shell $(TFDEMO) output -raw ecr_worker))
-	aws ecr get-login-password --region $(AWS_REGION) | \
-		docker login --username AWS --password-stdin $(shell echo $(ECR_API) | cut -d/ -f1)
-	docker build --platform linux/arm64 --provenance=false --target api -t $(ECR_API):latest .
-	docker build --platform linux/arm64 --provenance=false --target worker -t $(ECR_WORKER):latest .
-	docker push $(ECR_API):latest
-	docker push $(ECR_WORKER):latest
+	@$(MAKE) --no-print-directory push TF_DIR=deploy/demo PLATFORM=linux/arm64
+	@set -eu; \
+	api=$$($(TFDEMO) output -raw ecr_api); \
+	registry=$${api%%/*}; \
 	aws ssm send-command --region $(AWS_REGION) \
 		--instance-ids $$($(TFDEMO) output -raw instance_id) \
 		--document-name AWS-RunShellScript \
-		--parameters 'commands=["cd /opt/arena && aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(shell echo $(ECR_API) | cut -d/ -f1) && docker compose pull && docker compose up -d"]' \
+		--parameters "commands=[\"cd /opt/arena && aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $$registry && docker compose pull && docker compose up -d\"]" \
 		--output text --query 'Command.CommandId'
 
 demo-destroy:
