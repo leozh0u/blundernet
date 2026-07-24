@@ -177,7 +177,10 @@ resource "aws_appautoscaling_policy" "worker_queue" {
   scalable_dimension = aws_appautoscaling_target.worker.scalable_dimension
   policy_type        = "TargetTrackingScaling"
   target_tracking_scaling_policy_configuration {
-    target_value = 50 # visible messages per worker task
+    # Moves waiting per worker task. A move is only worth making if it
+    # arrives while the player is still looking at the board, so this is
+    # deliberately low: a backlog of ten is already seconds of waiting.
+    target_value = 10
     customized_metric_specification {
       metric_name = "ApproximateNumberOfMessagesVisible"
       namespace   = "AWS/SQS"

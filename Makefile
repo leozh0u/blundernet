@@ -36,8 +36,8 @@ deploy:
 	$(eval ECR_WORKER := $(shell $(TF) output -raw ecr_worker))
 	aws ecr get-login-password --region $(AWS_REGION) | \
 		docker login --username AWS --password-stdin $(shell echo $(ECR_API) | cut -d/ -f1)
-	docker build --platform linux/amd64 --target api -t $(ECR_API):latest .
-	docker build --platform linux/amd64 --target worker -t $(ECR_WORKER):latest .
+	docker build --platform linux/amd64 --provenance=false --target api -t $(ECR_API):latest .
+	docker build --platform linux/amd64 --provenance=false --target worker -t $(ECR_WORKER):latest .
 	docker push $(ECR_API):latest
 	docker push $(ECR_WORKER):latest
 	aws ecs update-service --region $(AWS_REGION) --cluster arena --service api --force-new-deployment > /dev/null
