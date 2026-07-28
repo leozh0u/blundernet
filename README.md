@@ -120,7 +120,7 @@ The repo ships two stacks, because the architecture worth designing and the arch
 
 `deploy/terraform` is the reference design: an autoscaling api fleet behind an ALB, workers scaled on queue depth, ElastiCache, RDS. It is what the system should look like under load, it has been deployed and exercised end to end, and it costs roughly $60 a month to leave running. So it goes up on demand and comes down after.
 
-`deploy/demo` is what actually stays online: one t4g.micro running the same two container images against a real SQS queue, with Postgres and Redis alongside and Caddy in front, for about $10 a month. Same code, same queue semantics, a tenth of the bill. Traffic to a demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point.
+`deploy/demo` is the version cheap enough to leave running: one t4g.micro with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $10 a month. Same code, same queue semantics, a tenth of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. Both stacks are torn down between demos, so there is no public URL to click right now; `make demo-deploy` prints one in a couple of minutes.
 
 ```
 make demo-deploy    # build arm64 images, push, stand up the box
