@@ -1,4 +1,4 @@
-// Load test for the arena.
+// Load test for the site.
 //
 // Two scenarios, selected with -e SCENARIO=:
 //

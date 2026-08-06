@@ -1,4 +1,4 @@
-module github.com/leozh0u/blundernet-arena
+module github.com/leozh0u/blundernet
 
 go 1.26.5
 

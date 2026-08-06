@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/leozh0u/blundernet-arena/internal/game"
+	"github.com/leozh0u/blundernet/internal/game"
 )
 
 const schema = `

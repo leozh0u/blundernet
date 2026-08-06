@@ -11,37 +11,37 @@ curl -fsSL https://github.com/docker/compose/releases/download/v2.32.4/docker-co
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-mkdir -p /opt/arena
+mkdir -p /opt/blundernet
 
 # Caddy terminates TLS automatically when a domain is set; without one it
 # just proxies plain HTTP on port 80.
 %{ if domain != "" ~}
-cat >/opt/arena/Caddyfile <<'CADDY'
+cat >/opt/blundernet/Caddyfile <<'CADDY'
 ${domain} {
   reverse_proxy api:8080
 }
 CADDY
 %{ else ~}
-cat >/opt/arena/Caddyfile <<'CADDY'
+cat >/opt/blundernet/Caddyfile <<'CADDY'
 :80 {
   reverse_proxy api:8080
 }
 CADDY
 %{ endif ~}
 
-cat >/opt/arena/compose.yaml <<'COMPOSE'
+cat >/opt/blundernet/compose.yaml <<'COMPOSE'
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: arena
-      POSTGRES_PASSWORD: arena
-      POSTGRES_DB: arena
+      POSTGRES_USER: blundernet
+      POSTGRES_PASSWORD: blundernet
+      POSTGRES_DB: blundernet
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arena"]
+      test: ["CMD-SHELL", "pg_isready -U blundernet"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
     environment: &appenv
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgres://arena:arena@postgres:5432/arena
+      DATABASE_URL: postgres://blundernet:blundernet@postgres:5432/blundernet
       SQS_QUEUE_URL: ${queue_url}
       AWS_REGION: ${region}
     depends_on:
@@ -85,7 +85,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /opt/arena/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/blundernet/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
     depends_on:
       - api
@@ -101,28 +101,28 @@ aws ecr get-login-password --region ${region} \
 # The images may not be pushed yet on a first deploy, so keep retrying
 # rather than leaving the box empty until someone notices.
 for attempt in $(seq 1 60); do
-  if docker compose -f /opt/arena/compose.yaml pull; then break; fi
+  if docker compose -f /opt/blundernet/compose.yaml pull; then break; fi
   echo "image pull failed (attempt $attempt), retrying in 30s"
   sleep 30
 done
-docker compose -f /opt/arena/compose.yaml up -d
+docker compose -f /opt/blundernet/compose.yaml up -d
 
 # Re-pull and restart on boot so the stack survives reboots and picks up
 # newly pushed images.
-cat >/etc/systemd/system/arena.service <<'UNIT'
+cat >/etc/systemd/system/blundernet.service <<'UNIT'
 [Unit]
-Description=BlunderNet Arena demo stack
+Description=BlunderNet demo stack
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/arena
-ExecStart=/usr/bin/docker compose -f /opt/arena/compose.yaml up -d
-ExecStop=/usr/bin/docker compose -f /opt/arena/compose.yaml down
+WorkingDirectory=/opt/blundernet
+ExecStart=/usr/bin/docker compose -f /opt/blundernet/compose.yaml up -d
+ExecStop=/usr/bin/docker compose -f /opt/blundernet/compose.yaml down
 
 [Install]
 WantedBy=multi-user.target
 UNIT
-systemctl enable arena.service
+systemctl enable blundernet.service

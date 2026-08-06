@@ -12,10 +12,10 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/leozh0u/blundernet-arena/internal/httpapi"
-	"github.com/leozh0u/blundernet-arena/internal/queue"
-	"github.com/leozh0u/blundernet-arena/internal/store"
-	"github.com/leozh0u/blundernet-arena/web"
+	"github.com/leozh0u/blundernet/internal/httpapi"
+	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/store"
+	"github.com/leozh0u/blundernet/web"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 	games := store.NewGames(rdb)
 
 	archive, err := store.NewArchive(ctx, envOr("DATABASE_URL",
-		"postgres://arena:arena@localhost:5432/arena"))
+		"postgres://blundernet:blundernet@localhost:5432/blundernet"))
 	if err != nil {
 		log.Fatalf("postgres: %v", err)
 	}

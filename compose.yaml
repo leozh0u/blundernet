@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: arena
-      POSTGRES_PASSWORD: arena
-      POSTGRES_DB: arena
+      POSTGRES_USER: blundernet
+      POSTGRES_PASSWORD: blundernet
+      POSTGRES_DB: blundernet
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arena"]
+      test: ["CMD-SHELL", "pg_isready -U blundernet"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -40,7 +40,7 @@ services:
       - "8080:8080"
     environment: &appenv
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgres://arena:arena@postgres:5432/arena
+      DATABASE_URL: postgres://blundernet:blundernet@postgres:5432/blundernet
       SQS_ENDPOINT: http://elasticmq:9324
       SQS_QUEUE_URL: http://elasticmq:9324/000000000000/moves
     depends_on:

@@ -27,8 +27,8 @@ resource "aws_db_instance" "db" {
   engine_version         = "17"
   instance_class         = "db.t4g.micro"
   allocated_storage      = 20
-  db_name                = "arena"
-  username               = "arena"
+  db_name                = "blundernet"
+  username               = "blundernet"
   password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db.id]

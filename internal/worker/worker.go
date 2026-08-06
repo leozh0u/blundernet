@@ -9,11 +9,11 @@ import (
 	"errors"
 	"log"
 
-	"github.com/leozh0u/blundernet-arena/internal/engine"
-	"github.com/leozh0u/blundernet-arena/internal/game"
-	"github.com/leozh0u/blundernet-arena/internal/httpapi"
-	"github.com/leozh0u/blundernet-arena/internal/queue"
-	"github.com/leozh0u/blundernet-arena/internal/store"
+	"github.com/leozh0u/blundernet/internal/engine"
+	"github.com/leozh0u/blundernet/internal/game"
+	"github.com/leozh0u/blundernet/internal/httpapi"
+	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/store"
 )
 
 type Worker struct {

@@ -12,8 +12,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/leozh0u/blundernet-arena/internal/queue"
-	"github.com/leozh0u/blundernet-arena/internal/store"
+	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/store"
 )
 
 type captureQueue struct {

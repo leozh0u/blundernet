@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/leozh0u/blundernet-arena/internal/game"
+	"github.com/leozh0u/blundernet/internal/game"
 )
 
 var (

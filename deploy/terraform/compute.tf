@@ -4,7 +4,7 @@
 
 locals {
   redis_url    = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379"
-  database_url = "postgres://arena:${var.db_password}@${aws_db_instance.db.endpoint}/arena"
+  database_url = "postgres://blundernet:${var.db_password}@${aws_db_instance.db.endpoint}/blundernet"
   app_env = [
     { name = "REDIS_URL", value = local.redis_url },
     { name = "DATABASE_URL", value = local.database_url },

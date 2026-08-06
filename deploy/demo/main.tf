@@ -17,7 +17,7 @@ terraform {
 provider "aws" {
   region = var.region
   default_tags {
-    tags = { Project = "blundernet-arena", Stack = "demo" }
+    tags = { Project = "blundernet", Stack = "demo" }
   }
 }
 
@@ -28,7 +28,7 @@ variable "region" {
 
 variable "name" {
   type    = string
-  default = "arena-demo"
+  default = "blundernet-demo"
 }
 
 variable "instance_type" {

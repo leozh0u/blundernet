@@ -1,7 +1,7 @@
 """Export a BlunderNet checkpoint to ONNX for the inference workers.
 
 Usage:
-    python scripts/export_onnx.py --repo ~/Projects/blundernet --out models/blundernet.onnx
+    python scripts/export_onnx.py --repo ~/Projects/blundernet-engine --out models/blundernet.onnx
 
 Run inside the blundernet venv (needs torch, onnx, onnxruntime).
 Verifies ONNX Runtime output matches PyTorch to 1e-4 before writing is

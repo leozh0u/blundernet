@@ -1,8 +1,8 @@
-# BlunderNet Arena
+# BlunderNet
 
-[![ci](https://github.com/leozh0u/blundernet-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/leozh0u/blundernet-arena/actions/workflows/ci.yml)
+[![ci](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml/badge.svg)](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml)
 
-Play chess against [BlunderNet](https://github.com/leozh0u/blundernet), a neural network I trained from scratch, at a site built to hold up when many people play at once.
+Play chess against [BlunderNet](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch, at a site built to hold up when many people play at once.
 
 The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? The answer here is a Go service fleet behind a load balancer, with game state in Redis, engine inference decoupled onto queue-fed workers, finished games archived in Postgres, and the whole thing defined in Terraform.
 
@@ -54,7 +54,7 @@ open http://localhost:8080
 To regenerate the model from the engine repo:
 
 ```
-python scripts/export_onnx.py --repo ../blundernet --out models/blundernet.onnx
+python scripts/export_onnx.py --repo ../blundernet-engine --out models/blundernet.onnx
 ```
 
 The export script checks that ONNX Runtime and PyTorch produce identical outputs before it succeeds. On this laptop a single position evaluates in 0.64 ms on CPU, which is why the workers do not need GPUs.

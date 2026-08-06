@@ -173,7 +173,7 @@ export default function App() {
           <span className="knight">♞</span>
         </div>
         <div className="titles">
-          <h1>BlunderNet Arena</h1>
+          <h1>BlunderNet</h1>
           <p className="rule">
             <span>Est. MMXXVI</span>
             <i />
@@ -307,9 +307,9 @@ export default function App() {
       {error && <div className="error">{error}</div>}
 
       <footer className="foot">
-        <a href="https://github.com/leozh0u/blundernet-arena">The workings</a>
+        <a href="https://github.com/leozh0u/blundernet">The workings</a>
         <i />
-        <a href="https://github.com/leozh0u/blundernet">The engine</a>
+        <a href="https://github.com/leozh0u/blundernet-engine">The engine</a>
       </footer>
     </div>
   )

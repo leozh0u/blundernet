@@ -9,10 +9,10 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/leozh0u/blundernet-arena/internal/engine"
-	"github.com/leozh0u/blundernet-arena/internal/queue"
-	"github.com/leozh0u/blundernet-arena/internal/store"
-	"github.com/leozh0u/blundernet-arena/internal/worker"
+	"github.com/leozh0u/blundernet/internal/engine"
+	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/store"
+	"github.com/leozh0u/blundernet/internal/worker"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 	rdb := redis.NewClient(opts)
 
 	archive, err := store.NewArchive(ctx, envOr("DATABASE_URL",
-		"postgres://arena:arena@localhost:5432/arena"))
+		"postgres://blundernet:blundernet@localhost:5432/blundernet"))
 	if err != nil {
 		log.Fatalf("postgres: %v", err)
 	}

@@ -33,8 +33,8 @@ deploy:
 	$(TF) init -input=false
 	$(TF) apply -auto-approve -input=false
 	@$(MAKE) --no-print-directory push TF_DIR=deploy/terraform PLATFORM=linux/amd64
-	aws ecs update-service --region $(AWS_REGION) --cluster arena --service api --force-new-deployment > /dev/null
-	aws ecs update-service --region $(AWS_REGION) --cluster arena --service worker --force-new-deployment > /dev/null
+	aws ecs update-service --region $(AWS_REGION) --cluster blundernet --service api --force-new-deployment > /dev/null
+	aws ecs update-service --region $(AWS_REGION) --cluster blundernet --service worker --force-new-deployment > /dev/null
 	@echo "live at: $$(terraform -chdir=deploy/terraform output -raw url)"
 
 # Build and push both images to whichever stack's ECR repos TF_DIR names.
@@ -80,7 +80,7 @@ demo-update:
 	aws ssm send-command --region $(AWS_REGION) \
 		--instance-ids $$($(TFDEMO) output -raw instance_id) \
 		--document-name AWS-RunShellScript \
-		--parameters "commands=[\"cd /opt/arena && aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $$registry && docker compose pull && docker compose up -d\"]" \
+		--parameters "commands=[\"cd /opt/blundernet && aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $$registry && docker compose pull && docker compose up -d\"]" \
 		--output text --query 'Command.CommandId'
 
 demo-destroy:

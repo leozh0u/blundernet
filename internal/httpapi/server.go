@@ -15,9 +15,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/leozh0u/blundernet-arena/internal/game"
-	"github.com/leozh0u/blundernet-arena/internal/queue"
-	"github.com/leozh0u/blundernet-arena/internal/store"
+	"github.com/leozh0u/blundernet/internal/game"
+	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/store"
 )
 
 const Version = "0.1.0"
