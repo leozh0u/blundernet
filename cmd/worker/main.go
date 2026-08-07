@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,12 @@ import (
 )
 
 func main() {
+	// The worker image carries no HTTP client, so the binary probes its
+	// own metrics port when the container healthcheck invokes it.
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
+		os.Exit(healthcheck())
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -71,4 +78,16 @@ func envOr(key, def string) string {
 func fatal(msg string, err error) {
 	slog.Error(msg, "err", err)
 	os.Exit(1)
+}
+
+func healthcheck() int {
+	resp, err := http.Get("http://127.0.0.1:" + envOr("METRICS_PORT", "9090") + "/metrics")
+	if err != nil {
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }

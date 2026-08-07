@@ -17,23 +17,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Metric names are prefixed so they stay distinct from the Go runtime and
-// process collectors the default registry already exposes.
 const ns = "blundernet"
 
 var (
-	// RED metrics for the HTTP surface. The route label is the ServeMux
-	// pattern rather than the request path: /api/games/{id} is one label
-	// value, not one per game, which is what keeps cardinality bounded.
+	// The route label is the ServeMux pattern, not the request path, so
+	// /api/games/{id} is one series rather than one per game.
 	httpRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: ns, Subsystem: "http", Name: "requests_total",
 		Help: "HTTP requests by route, method and status class.",
 	}, []string{"route", "method", "status"})
 
-	// Buckets run from 1ms to 5s. The SLO for this API is a p99 under
-	// 30ms, so the interesting resolution is at the bottom of the range;
-	// the default client buckets start at 5ms and would put the target
-	// inside the first two buckets.
+	// Buckets bottom out at 1ms because the target is a p99 under 30ms;
+	// the client defaults start at 5ms and put that inside bucket two.
 	httpDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: ns, Subsystem: "http", Name: "request_duration_seconds",
 		Help:    "HTTP request duration by route and method.",
@@ -55,19 +50,16 @@ var (
 		Help: "Games that reached a terminal state, by result.",
 	}, []string{"result"})
 
-	// Outcomes of a job delivery. SQS is at-least-once, so "played" is not
-	// the only success: expired, stale and conflict are all correct
-	// outcomes of the idempotency logic, and counting them separately is
-	// what makes that logic observable instead of merely asserted.
+	// SQS is at-least-once, so "played" is not the only success: expired,
+	// stale and conflict are the idempotency logic doing its job. Counting
+	// them separately is what makes that behaviour visible.
 	workerJobs = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: ns, Subsystem: "worker", Name: "jobs_total",
 		Help: "Job deliveries by outcome (played, expired, stale, conflict, error).",
 	}, []string{"outcome"})
 
-	// A search at the default simulation count costs roughly a quarter
-	// second, so these buckets sit an order of magnitude above the HTTP
-	// ones. Keeping them separate is the point of splitting inference off
-	// the request path in the first place.
+	// A search costs roughly a quarter second, so these buckets sit an
+	// order of magnitude above the HTTP ones.
 	engineDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: ns, Subsystem: "engine", Name: "move_duration_seconds",
 		Help:    "Time for the engine to choose a move.",
@@ -82,8 +74,8 @@ func init() {
 	)
 }
 
-// Job outcome labels, kept as constants so a typo is a compile error
-// rather than a silently separate time series.
+// Constants rather than bare strings so a typo is a compile error instead
+// of a silently separate time series.
 const (
 	JobPlayed   = "played"
 	JobExpired  = "expired"
@@ -99,8 +91,8 @@ func GameFinished(result string) { gamesFinished.WithLabelValues(resultLabel(res
 func WSOpened()                  { wsConnections.Inc() }
 func WSClosed()                  { wsConnections.Dec() }
 
-// resultLabel collapses the result string to the three values a chess game
-// can end in, so an unexpected value cannot open an unbounded label space.
+// Collapsed to the three values a game can end in, so an unexpected
+// result cannot open an unbounded label space.
 func resultLabel(result string) string {
 	switch result {
 	case "1-0", "0-1", "1/2-1/2":
@@ -110,9 +102,9 @@ func resultLabel(result string) string {
 	}
 }
 
-// SetupLogging installs a JSON slog handler as the default logger. JSON
-// because these logs land in CloudWatch or journald, where filtering on a
-// field beats grepping a formatted string.
+// SetupLogging installs a JSON slog handler as the default logger. These
+// logs land in CloudWatch or journald, where filtering on a field beats
+// grepping a formatted string.
 func SetupLogging(service string) *slog.Logger {
 	level := slog.LevelInfo
 	if os.Getenv("LOG_LEVEL") == "debug" {
@@ -124,23 +116,18 @@ func SetupLogging(service string) *slog.Logger {
 	return l
 }
 
-// MetricsHandler serves the Prometheus exposition endpoint. It is mounted
-// on its own listener rather than the public mux so that scraping does not
-// go through the load balancer and /metrics is not reachable from the
-// internet.
-func MetricsHandler() http.Handler { return promhttp.Handler() }
-
-// ServeMetrics starts the metrics listener and blocks until it fails.
+// ServeMetrics starts the metrics listener and blocks until it fails. It
+// gets its own listener rather than a route on the public mux, so scraping
+// never goes through the load balancer and /metrics stays off the internet.
 func ServeMetrics(addr string) error {
 	mux := http.NewServeMux()
-	mux.Handle("GET /metrics", MetricsHandler())
+	mux.Handle("GET /metrics", promhttp.Handler())
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	return srv.ListenAndServe()
 }
 
 // statusRecorder captures the status code, which net/http does not expose
-// after the fact. It also tracks whether the connection was hijacked, which
-// a WebSocket upgrade does.
+// after the handler has run.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -201,10 +188,9 @@ func Middleware(next http.Handler) http.Handler {
 		}
 		httpRequests.WithLabelValues(route, r.Method, strconv.Itoa(status)).Inc()
 
-		// WebSocket requests are excluded from the latency histogram. The
-		// connection lives as long as the game does, so timing it measures
-		// session length, not service latency, and would swamp the p99 the
-		// SLO is written against.
+		// A WebSocket connection lives as long as the game does, so timing
+		// it would measure session length rather than service latency and
+		// swamp the p99 the target is written against.
 		if !isWebSocket(r) {
 			httpDuration.WithLabelValues(route, r.Method).Observe(time.Since(start).Seconds())
 		}

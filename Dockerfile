@@ -44,4 +44,8 @@ ENV ONNXRUNTIME_LIB=/usr/local/lib/libonnxruntime.so
 COPY models/ /models/
 ENV MODEL_PATH=/models/blundernet.onnx
 COPY --from=gobuild /out/worker /usr/local/bin/worker
+# The worker serves no traffic, so its metrics port is the only thing that
+# can answer a probe. This image has no wget, so the binary probes itself.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=30s \
+  CMD worker -healthcheck || exit 1
 ENTRYPOINT ["worker"]

@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml/badge.svg)](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml)
 
-Play chess against [BlunderNet](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch, at a site built to hold up when many people play at once.
+Play chess against [the BlunderNet engine](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch, at a site built to hold up when many people play at once.
 
 The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? The answer here is a Go service fleet behind a load balancer, with game state in Redis, engine inference decoupled onto queue-fed workers, finished games archived in Postgres, and the whole thing defined in Terraform.
 
@@ -38,6 +38,8 @@ A move makes the following trip. The api validates it against the chess rules, w
 **The worker searches; the network guides.** A raw policy network plays plausible openings and then hangs pieces, because a single forward pass calculates nothing. The worker instead runs PUCT Monte-Carlo Tree Search (the same algorithm the engine trains with): the policy head supplies move priors, the value head scores leaf positions, and a few hundred simulations turn intuition into calculation. `ENGINE_SIMS` sets the strength knob (default 300, about a quarter second per move; 1 disables search entirely). Search also papers over a measured blind spot: in positions unlike the training data the policy can assign a mating move a near-zero prior and starve it of visits, so the worker probes one ply for immediate mates before trusting the tree.
 
 **Underpromotions are folded into queen promotions.** The policy head indexes moves as from-square times 64 plus to-square, which cannot distinguish promotion pieces. The training pipeline made that tradeoff (it costs well under 1% of moves), so the serving path mirrors it exactly. The board encoding in Go reproduces the Python training encoder plane for plane, and the parity is pinned by tests on both sides of the export.
+
+**Both binaries log JSON and expose metrics.** Logs go through `slog` with a `service` field, including the startup failures, since an unstructured line is the one entry that most needs to survive the pipeline. Metrics are Prometheus, on port 9090 on a listener of their own so scraping never crosses the load balancer and `/metrics` is not reachable from outside. HTTP series are labelled by the ServeMux pattern rather than the path, so `/api/games/{id}` stays one series instead of one per game. WebSocket requests are counted but left out of the latency histogram, because a connection lives as long as the game and timing it would measure session length. The worker counts job outcomes separately for played, expired, stale, conflict and error, which is the idempotency logic made visible: the last three are it working, not failing.
 
 **No NAT gateway.** The VPC has public subnets only, with isolation done by security groups. Fargate tasks get public IPs so they can pull images, and a NAT gateway would add about $32 a month to serve no traffic. The stack is built to be stood up for a demo and torn down after: `make deploy`, play, `make destroy`.
 
@@ -150,6 +152,7 @@ internal/engine          board encoding, ONNX inference, fallback searcher
 internal/store           Redis (live state, CAS, pub/sub) and Postgres (archive)
 internal/queue           SQS client, ElasticMQ-compatible for local dev
 internal/httpapi         REST + WebSocket handlers, embedded frontend
+internal/obs             JSON logging, Prometheus metrics, HTTP middleware
 web/                     React frontend, built into the api binary
 deploy/terraform         the AWS stack
 loadtest/                k6 scenario
