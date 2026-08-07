@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/leozh0u/blundernet/internal/engine"
+	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
 	"github.com/leozh0u/blundernet/internal/store"
 	"github.com/leozh0u/blundernet/internal/worker"
@@ -18,6 +20,19 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	obs.SetupLogging("worker")
+
+	// The worker has no public surface, so metrics are the only thing it
+	// serves. Same port as the api uses for its metrics listener, so one
+	// scrape config covers both fleets.
+	metricsAddr := ":" + envOr("METRICS_PORT", "9090")
+	go func() {
+		slog.Info("metrics listening", "addr", metricsAddr)
+		if err := obs.ServeMetrics(metricsAddr); err != nil {
+			slog.Error("metrics server stopped", "err", err)
+		}
+	}()
 
 	opts, err := redis.ParseURL(envOr("REDIS_URL", "redis://localhost:6379"))
 	if err != nil {
@@ -44,7 +59,7 @@ func main() {
 		Engine:  engine.NewFromEnv(),
 	}
 	w.Run(ctx)
-	log.Print("worker stopped")
+	slog.Info("worker stopped")
 }
 
 func envOr(key, def string) string {

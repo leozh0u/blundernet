@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/leozh0u/blundernet/internal/httpapi"
+	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
 	"github.com/leozh0u/blundernet/internal/store"
 	"github.com/leozh0u/blundernet/web"
@@ -21,6 +23,8 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	obs.SetupLogging("api")
 
 	opts, err := redis.ParseURL(envOr("REDIS_URL", "redis://localhost:6379"))
 	if err != nil {
@@ -43,18 +47,28 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + envOr("PORT", "8080"),
-		Handler:           httpapi.New(games, archive, jobs, rdb, web.Dist()),
+		Handler:           obs.Middleware(httpapi.New(games, archive, jobs, rdb, web.Dist())),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Printf("api listening on %s", srv.Addr)
+		slog.Info("api listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("serve: %v", err)
 		}
 	}()
 
+	// Metrics listen on their own port so that /metrics is never routed
+	// through the load balancer and stays off the public surface.
+	metricsAddr := ":" + envOr("METRICS_PORT", "9090")
+	go func() {
+		slog.Info("metrics listening", "addr", metricsAddr)
+		if err := obs.ServeMetrics(metricsAddr); !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("metrics server stopped", "err", err)
+		}
+	}()
+
 	<-ctx.Done()
-	log.Print("shutting down")
+	slog.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)

@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
+	"time"
 
 	"github.com/leozh0u/blundernet/internal/engine"
 	"github.com/leozh0u/blundernet/internal/game"
 	"github.com/leozh0u/blundernet/internal/httpapi"
+	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
 	"github.com/leozh0u/blundernet/internal/store"
 )
@@ -25,12 +27,12 @@ type Worker struct {
 
 // Run polls until the context is cancelled.
 func (w *Worker) Run(ctx context.Context) {
-	log.Printf("worker running with engine %s", w.Engine.Name())
+	slog.Info("worker running", "engine", w.Engine.Name())
 	for ctx.Err() == nil {
 		msgs, err := w.Jobs.Receive(ctx, 5)
 		if err != nil {
 			if ctx.Err() == nil {
-				log.Printf("receive: %v", err)
+				slog.Error("receive", "err", err)
 			}
 			continue
 		}
@@ -38,11 +40,11 @@ func (w *Worker) Run(ctx context.Context) {
 			if err := w.Process(ctx, m.Job); err != nil {
 				// Leave the message for redelivery after the
 				// visibility timeout.
-				log.Printf("process %s ply %d: %v", m.Job.GameID, m.Job.Ply, err)
+				slog.Error("process", "game", m.Job.GameID, "ply", m.Job.Ply, "err", err)
 				continue
 			}
 			if err := w.Jobs.Ack(ctx, m); err != nil {
-				log.Printf("ack %s: %v", m.Job.GameID, err)
+				slog.Error("ack", "game", m.Job.GameID, "err", err)
 			}
 		}
 	}
@@ -53,38 +55,51 @@ func (w *Worker) Run(ctx context.Context) {
 func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 	g, err := w.Games.Get(ctx, j.GameID)
 	if errors.Is(err, store.ErrNotFound) {
+		obs.JobOutcome(obs.JobExpired)
 		return nil // game expired; nothing to do
 	}
 	if err != nil {
+		obs.JobOutcome(obs.JobError)
 		return err
 	}
 	// Stale or duplicate delivery: the position has moved past this job.
 	if g.Ply != j.Ply || g.Status != game.StatusOngoing || g.Turn() != g.EngineColor() {
+		obs.JobOutcome(obs.JobStale)
 		return nil
 	}
 
+	start := time.Now()
 	uci, err := w.Engine.BestMove(g.FEN())
 	if err != nil {
+		obs.JobOutcome(obs.JobError)
 		return err
 	}
+	obs.EngineMove(time.Since(start))
+
 	prevPly := g.Ply
 	if err := g.ApplyMove(g.EngineColor(), uci); err != nil {
+		obs.JobOutcome(obs.JobError)
 		return err
 	}
 	if err := w.Games.Update(ctx, g, prevPly); err != nil {
 		if errors.Is(err, store.ErrConflict) {
+			obs.JobOutcome(obs.JobConflict)
 			return nil // someone else already advanced the game
 		}
+		obs.JobOutcome(obs.JobError)
 		return err
 	}
+	obs.JobOutcome(obs.JobPlayed)
+
 	if raw, err := json.Marshal(httpapi.ToState(g)); err == nil {
 		if err := w.Games.Publish(ctx, g.ID, raw); err != nil {
-			log.Printf("publish %s: %v", g.ID, err)
+			slog.Error("publish", "game", g.ID, "err", err)
 		}
 	}
 	if g.Status == game.StatusFinished && w.Archive != nil {
+		obs.GameFinished(g.Result)
 		if err := w.Archive.SaveFinished(ctx, g); err != nil {
-			log.Printf("archive %s: %v", g.ID, err)
+			slog.Error("archive", "game", g.ID, "err", err)
 		}
 	}
 	return nil

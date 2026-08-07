@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/leozh0u/blundernet/internal/game"
+	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
 	"github.com/leozh0u/blundernet/internal/store"
 )
@@ -108,6 +109,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
+	obs.GameCreated(req.Color)
 	// Player chose black: the engine opens.
 	if req.Color == "black" {
 		if err := s.jobs.Enqueue(r.Context(), queue.Job{GameID: g.ID, Ply: 0}); err != nil {
@@ -223,6 +225,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	obs.WSOpened()
+	defer obs.WSClosed()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
