@@ -2,9 +2,9 @@
 //
 // Two scenarios, selected with -e SCENARIO=:
 //
-//   steady (default) — a constant arrival rate of new games. Use this to
+//   steady (default): a constant arrival rate of new games. Use this to
 //     measure latency percentiles at a load the fleet can actually hold.
-//   ramp             — arrival rate climbing past saturation. Use this to
+//   ramp             : arrival rate climbing past saturation. Use this to
 //     find the ceiling, watch the queue absorb the overflow, and give the
 //     worker autoscaling policy something to react to.
 //

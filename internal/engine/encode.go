@@ -7,7 +7,7 @@ import (
 )
 
 // Board encoding, mirroring the training pipeline exactly:
-// 18 planes of 8x8 — 12 piece planes (white PNBRQK, then black), side to
+// 18 planes of 8x8: 12 piece planes (white PNBRQK, then black), side to
 // move, 4 castling rights, en-passant file. Policy is 64*64 from/to pairs
 // with underpromotions folded into the queen promotion.
 const (

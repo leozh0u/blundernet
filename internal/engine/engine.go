@@ -4,7 +4,7 @@
 package engine
 
 import (
-	"log"
+	"log/slog"
 	"os"
 )
 
@@ -20,19 +20,19 @@ type Engine interface {
 func NewFromEnv() Engine {
 	modelPath := envOr("MODEL_PATH", "models/blundernet.onnx")
 	if _, err := os.Stat(modelPath); err != nil {
-		log.Printf("engine: model %s not found, using material fallback", modelPath)
+		slog.Warn("model not found, using material fallback", "path", modelPath)
 		return NewMaterial()
 	}
 	onnx, err := NewONNX(modelPath)
 	if err != nil {
-		log.Printf("engine: onnx unavailable (%v), using material fallback", err)
+		slog.Warn("onnx unavailable, using material fallback", "err", err)
 		return NewMaterial()
 	}
 	var eng Engine = onnx
 	if sims := SimsFromEnv(); sims > 1 {
 		eng = NewMCTS(onnx, sims)
 	}
-	log.Printf("engine: %s", eng.Name())
+	slog.Info("engine selected", "engine", eng.Name())
 	return eng
 }
 

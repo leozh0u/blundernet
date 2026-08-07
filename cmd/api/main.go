@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,7 +27,7 @@ func main() {
 
 	opts, err := redis.ParseURL(envOr("REDIS_URL", "redis://localhost:6379"))
 	if err != nil {
-		log.Fatalf("redis url: %v", err)
+		fatal("redis url", err)
 	}
 	rdb := redis.NewClient(opts)
 	games := store.NewGames(rdb)
@@ -36,13 +35,13 @@ func main() {
 	archive, err := store.NewArchive(ctx, envOr("DATABASE_URL",
 		"postgres://blundernet:blundernet@localhost:5432/blundernet"))
 	if err != nil {
-		log.Fatalf("postgres: %v", err)
+		fatal("postgres", err)
 	}
 	defer archive.Close()
 
 	jobs, err := queue.New(ctx)
 	if err != nil {
-		log.Fatalf("queue: %v", err)
+		fatal("queue", err)
 	}
 
 	srv := &http.Server{
@@ -53,7 +52,7 @@ func main() {
 	go func() {
 		slog.Info("api listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("serve: %v", err)
+			fatal("serve", err)
 		}
 	}()
 
@@ -79,4 +78,12 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// fatal logs through the same JSON handler as everything else and exits.
+// log.Fatalf would write an unstructured line, which is the one log entry
+// that most needs to survive the pipeline.
+func fatal(msg string, err error) {
+	slog.Error(msg, "err", err)
+	os.Exit(1)
 }

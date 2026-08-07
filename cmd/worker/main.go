@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -36,20 +35,20 @@ func main() {
 
 	opts, err := redis.ParseURL(envOr("REDIS_URL", "redis://localhost:6379"))
 	if err != nil {
-		log.Fatalf("redis url: %v", err)
+		fatal("redis url", err)
 	}
 	rdb := redis.NewClient(opts)
 
 	archive, err := store.NewArchive(ctx, envOr("DATABASE_URL",
 		"postgres://blundernet:blundernet@localhost:5432/blundernet"))
 	if err != nil {
-		log.Fatalf("postgres: %v", err)
+		fatal("postgres", err)
 	}
 	defer archive.Close()
 
 	jobs, err := queue.New(ctx)
 	if err != nil {
-		log.Fatalf("queue: %v", err)
+		fatal("queue", err)
 	}
 
 	w := &worker.Worker{
@@ -67,4 +66,9 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func fatal(msg string, err error) {
+	slog.Error(msg, "err", err)
+	os.Exit(1)
 }

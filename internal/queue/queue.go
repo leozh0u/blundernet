@@ -1,5 +1,5 @@
 // Package queue carries move-evaluation jobs from the api to the engine
-// workers over SQS (ElasticMQ locally — same wire protocol).
+// workers over SQS (ElasticMQ locally, same wire protocol).
 package queue
 
 import (

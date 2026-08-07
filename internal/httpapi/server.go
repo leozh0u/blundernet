@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -175,12 +175,12 @@ func (s *Server) handleResign(w http.ResponseWriter, r *http.Request) {
 }
 
 // afterChange handles everything downstream of a successful state write:
-// fan-out to watchers, engine hand-off, archival. Best-effort by design —
+// fan-out to watchers, engine hand-off, archival. Best-effort by design,
 // the state in Redis is already authoritative.
 func (s *Server) afterChange(ctx context.Context, g *game.Game) {
 	if raw, err := json.Marshal(ToState(g)); err == nil {
 		if err := s.games.Publish(ctx, g.ID, raw); err != nil {
-			log.Printf("publish %s: %v", g.ID, err)
+			slog.Error("publish", "game", g.ID, "err", err)
 		}
 	}
 	switch {
@@ -189,11 +189,11 @@ func (s *Server) afterChange(ctx context.Context, g *game.Game) {
 			return
 		}
 		if err := s.archive.SaveFinished(ctx, g); err != nil {
-			log.Printf("archive %s: %v", g.ID, err)
+			slog.Error("archive", "game", g.ID, "err", err)
 		}
 	case g.Turn() == g.EngineColor():
 		if err := s.jobs.Enqueue(ctx, queue.Job{GameID: g.ID, Ply: g.Ply}); err != nil {
-			log.Printf("enqueue %s: %v", g.ID, err)
+			slog.Error("enqueue", "game", g.ID, "err", err)
 		}
 	}
 }
@@ -303,7 +303,7 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 }
 
 func internalError(w http.ResponseWriter, err error) {
-	log.Printf("internal error: %v", err)
+	slog.Error("internal error", "err", err)
 	httpError(w, http.StatusInternalServerError, "internal error")
 }
 
