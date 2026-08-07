@@ -5,7 +5,7 @@
 *.out
 vendor/
 
-# Env / secrets — never commit these
+# Env / secrets, never commit these
 .env
 .env.*
 *.tfvars
