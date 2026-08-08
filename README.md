@@ -133,7 +133,9 @@ The latency target covers `/api/` only. Serving the frontend bundle and holding 
 
 The engine target is the one under real pressure. A move costs about 1.6 s of CPU, so a single worker sustains roughly 0.6 moves a second. Past that, the queue absorbs the overflow and the cost lands on move latency instead of errors, which is the tradeoff the architecture was built to make. It also means the engine target breaks well before the API one does, and it breaks first for whoever is unlucky enough to be playing at the time.
 
-`/status` reports current numbers against these.
+`/status` reports current numbers against these. It is server-rendered with no scripts and no stylesheet request, because a status page that depends on the app it reports on cannot tell you the app is down. `/api/status` is the same data as JSON and answers 503 when a dependency is failing.
+
+Availability is the one target the service cannot measure about itself, since a process that is down cannot report that it is down. `.github/workflows/uptime.yml` probes `/api/status` from outside AWS every ten minutes and fails the run after two consecutive bad responses. It stays inert until the `SITE_URL` repository variable is set. GitHub's scheduled runners are best effort, though: runs queue, arrive late, and stop entirely after 60 days of repo inactivity, so this is a backstop with a record in the Actions log rather than a pager.
 
 ## Two deployments, on purpose
 

@@ -1,0 +1,62 @@
+name: uptime
+
+# Probes the deployed site from outside AWS, so a check passing means the
+# whole path works rather than that the process is alive. /api/status is the
+# target because it returns 503 when a dependency is failing, which a plain
+# /healthz on the api would not catch.
+#
+# GitHub's scheduled runners are best effort: runs are queued, often late,
+# and skipped entirely once a repo has been quiet for 60 days. This is a
+# backstop with a record in the Actions log, not a pager.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      # Inert until the site is deployed. Skipping keeps the Actions log
+      # honest: a green run should mean the probe passed, not that there was
+      # nothing to probe.
+      - name: Check the URL is configured
+        id: config
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          if [ -z "$SITE_URL" ]; then
+            echo "SITE_URL repository variable is not set; nothing deployed yet."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Probe
+        if: steps.config.outputs.skip != 'true'
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          set -uo pipefail
+          body=$(mktemp)
+          # Two attempts, because a single failed request across the public
+          # internet is not an outage and paging on one is how a monitor
+          # gets ignored.
+          for attempt in 1 2; do
+            # curl already writes 000 when it cannot connect, so the failure
+            # only needs swallowing, not a substitute value.
+            code=$(curl -sS --max-time 10 -o "$body" -w '%{http_code}' \
+              "$SITE_URL/api/status") || true
+            if [ "$code" = "200" ]; then
+              echo "attempt $attempt: $code"
+              cat "$body"
+              exit 0
+            fi
+            echo "attempt $attempt failed with $code"
+            cat "$body" || true
+            # An explicit if, not a && list. Actions runs bash with -e, so a
+            # failing test as the last command in the loop would exit here
+            # and skip the annotation below.
+            if [ "$attempt" = 1 ]; then sleep 20; fi
+          done
+          echo "::error::$SITE_URL/api/status returned $code twice"
+          exit 1
