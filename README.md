@@ -116,6 +116,25 @@ Three things worth reading out of that. The API never failed or slowed under thr
 
 The bottleneck is the engine, not the platform. Each move costs about 1.6 s of CPU on a 0.5 vCPU task, so one worker sustains roughly 0.6 moves/s and four sustain about 2.4. Raising simulations, task CPU, or batching leaf evaluations inside a search all move that number; none of them touch the API.
 
+## What it promises
+
+Four targets, measured over a calendar month. They are deliberately set where the measurements above say the system already sits, so missing one means something changed rather than that the target was always fiction.
+
+| | Target | Where it comes from |
+|---|---|---|
+| Site reachable | 99% | One box, no redundancy. See below. |
+| Requests not failing | 99.9% non-5xx | Load tests ran 3,510 requests with zero failures. |
+| API latency | p99 under 50 ms | Measured 21 to 31 ms at the load balancer. |
+| Engine reply | p95 under 3 s | Measured 1.25 s with four workers. |
+
+99% allows about seven hours of downtime a month, which is a weak number and an honest one. The always-on deployment is a single instance, so a reboot, a bad deploy, or the host going away is a full outage with nothing to fail over to. Promising 99.9% would need a second instance and a load balancer, which is the reference stack, which is the thing that costs $60 a month rather than $10. Availability here is a budget decision, not an engineering one, and quoting three nines off a single box would be the kind of number that falls apart the first time someone asks how.
+
+The latency target covers `/api/` only. Serving the frontend bundle and holding WebSocket connections are different jobs: a WebSocket lives as long as the game, so timing it measures how long someone played rather than how fast the service answered.
+
+The engine target is the one under real pressure. A move costs about 1.6 s of CPU, so a single worker sustains roughly 0.6 moves a second. Past that, the queue absorbs the overflow and the cost lands on move latency instead of errors, which is the tradeoff the architecture was built to make. It also means the engine target breaks well before the API one does, and it breaks first for whoever is unlucky enough to be playing at the time.
+
+`/status` reports current numbers against these.
+
 ## Two deployments, on purpose
 
 The repo ships two stacks, because the architecture worth designing and the architecture worth paying for every month are not the same thing.
