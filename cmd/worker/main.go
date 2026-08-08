@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -58,11 +59,18 @@ func main() {
 		fatal("queue", err)
 	}
 
+	games := store.NewGames(rdb)
+	eng := engine.NewFromEnv()
+
+	// Engine timings are measured here but published by the api, so they go
+	// through Redis. HOSTNAME is the task or container id on ECS and compose.
+	go store.PublishEngineReports(ctx, games, envOr("HOSTNAME", "worker"), eng.Name(), 15*time.Second)
+
 	w := &worker.Worker{
-		Games:   store.NewGames(rdb),
+		Games:   games,
 		Archive: archive,
 		Jobs:    jobs,
-		Engine:  engine.NewFromEnv(),
+		Engine:  eng,
 	}
 	w.Run(ctx)
 	slog.Info("worker stopped")

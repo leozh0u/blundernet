@@ -74,6 +74,15 @@ func Gather() Snapshot {
 	return s
 }
 
+func sortedBounds(buckets map[float64]uint64) []float64 {
+	bounds := make([]float64, 0, len(buckets))
+	for b := range buckets {
+		bounds = append(bounds, b)
+	}
+	sort.Float64s(bounds)
+	return bounds
+}
+
 func labelOf(m *dto.Metric, name string) string {
 	for _, l := range m.GetLabel() {
 		if l.GetName() == name {
@@ -101,12 +110,7 @@ func quantiles(metrics []*dto.Metric, keep func(*dto.Metric) bool) Quantiles {
 	if total == 0 {
 		return Quantiles{}
 	}
-	bounds := make([]float64, 0, len(merged))
-	for b := range merged {
-		bounds = append(bounds, b)
-	}
-	sort.Float64s(bounds)
-
+	bounds := sortedBounds(merged)
 	return Quantiles{
 		Count: total,
 		P50:   quantileAt(bounds, merged, total, 0.50),

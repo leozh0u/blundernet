@@ -49,6 +49,8 @@ func New(games *store.Games, archive *store.Archive, jobs Enqueuer, rdb *redis.C
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
+	mux.HandleFunc("GET /api/status", s.handleStatusJSON)
+	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.Handle("GET /", spaHandler(static))
 	s.mux = mux
 	return s
