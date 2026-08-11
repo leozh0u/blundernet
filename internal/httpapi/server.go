@@ -101,6 +101,8 @@ func New(d Deps) *Server {
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
+	mux.HandleFunc("GET /api/me/profile", s.handleProfile)
+	mux.HandleFunc("GET /api/me/games", s.handleHistory)
 	mux.HandleFunc("GET /api/status", s.handleStatusJSON)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.Handle("GET /", spaHandler(d.Static))
@@ -163,6 +165,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g := game.New(uuid.NewString(), req.Color)
+	// Attached at creation, not at archival. The worker writes the archive
+	// for games that end in checkmate and has no session to ask.
+	if u := UserFrom(r.Context()); u != nil {
+		g.UserID = u.ID
+	}
 	if err := s.games.Create(r.Context(), g); err != nil {
 		internalError(w, err)
 		return

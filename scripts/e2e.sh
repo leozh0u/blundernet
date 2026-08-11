@@ -84,4 +84,41 @@ who=$(curl -sf -b "$jar" "$BASE/api/auth/me" | json "['user']")
 echo "   logout revoked the session"
 rm -f "$jar"
 
+echo "7. a signed-in game is attached to the account and rated"
+jar2=$(mktemp)
+ruser="e2e_r$RANDOM$RANDOM"
+curl -sf -c "$jar2" -X POST "$BASE/api/auth/signup" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$ruser\",\"password\":\"correct horse battery\"}" > /dev/null
+
+before=$(curl -sf -b "$jar2" "$BASE/api/me/profile" | json "['rating']")
+gid=$(curl -sf -b "$jar2" -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
+  -d '{"color":"white"}' | json "['id']")
+curl -sf -b "$jar2" -X POST "$BASE/api/games/$gid/resign" > /dev/null
+sleep 1
+
+after=$(curl -sf -b "$jar2" "$BASE/api/me/profile" | json "['rating']")
+python3 -c "import sys; sys.exit(0 if $after < $before else 1)" \
+  || { echo "   rating did not fall after a loss: $before -> $after" >&2; exit 1; }
+echo "   rating moved $before -> $after after losing"
+
+games=$(curl -sf -b "$jar2" "$BASE/api/me/games" | json "['games'].__len__()")
+[ "$games" = "1" ] || { echo "   expected 1 game in history, got $games" >&2; exit 1; }
+echo "   game appears in history"
+
+# The api and the worker both archive a finished game. Rating a game twice is
+# the bug the ON CONFLICT gate exists to stop, so re-resigning must not move it.
+curl -s -o /dev/null -X POST "$BASE/api/games/$gid/resign" || true
+sleep 1
+again=$(curl -sf -b "$jar2" "$BASE/api/me/profile" | json "['rating']")
+[ "$again" = "$after" ] || { echo "   rating changed on replay: $after -> $again" >&2; exit 1; }
+echo "   replayed archive did not double-count"
+
+anon=$(curl -sf -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
+  -d '{"color":"white"}' | json "['id']")
+curl -sf -X POST "$BASE/api/games/$anon/resign" > /dev/null
+still=$(curl -sf -b "$jar2" "$BASE/api/me/games" | json "['games'].__len__()")
+[ "$still" = "1" ] || { echo "   an anonymous game leaked into the account" >&2; exit 1; }
+echo "   anonymous games stay unattached"
+rm -f "$jar2"
+
 echo "e2e ok"

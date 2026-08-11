@@ -28,10 +28,14 @@ var (
 // full position is always reconstructed by replaying them, so the stored
 // state can never drift from the rules engine.
 type Game struct {
-	ID          string    `json:"id"`
-	Moves       []string  `json:"moves"`
-	Ply         int       `json:"ply"`
-	PlayerColor string    `json:"player_color"` // "white" or "black"
+	ID          string   `json:"id"`
+	Moves       []string `json:"moves"`
+	Ply         int      `json:"ply"`
+	PlayerColor string   `json:"player_color"` // "white" or "black"
+	// Empty for anonymous games, which stay supported. The id travels with
+	// the game through Redis because the archive write happens in the worker,
+	// which has no session and no way to ask who started this.
+	UserID      string    `json:"user_id,omitempty"`
 	Status      Status    `json:"status"`
 	Result      string    `json:"result"`      // "1-0", "0-1", "1/2-1/2", ""
 	Termination string    `json:"termination"` // "checkmate", "stalemate", "resignation", ...

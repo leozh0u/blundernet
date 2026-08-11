@@ -3,10 +3,9 @@ package store
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/leozh0u/blundernet/internal/game"
 )
 
 type Archive struct {
@@ -31,18 +30,6 @@ func (a *Archive) Pool() *pgxpool.Pool { return a.pool }
 
 func (a *Archive) Close() { a.pool.Close() }
 
-// SaveFinished archives a completed game. Idempotent: both the api and the
-// worker may try to archive the same game, so replays are no-ops.
-func (a *Archive) SaveFinished(ctx context.Context, g *game.Game) error {
-	_, err := a.pool.Exec(ctx, `
-		INSERT INTO games (id, player_color, result, termination, moves, ply, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (id) DO NOTHING`,
-		g.ID, g.PlayerColor, g.Result, g.Termination,
-		strings.Join(g.Moves, " "), g.Ply, g.CreatedAt)
-	return err
-}
-
 type Stats struct {
 	Total      int `json:"total"`
 	EngineWins int `json:"engine_wins"`
@@ -64,4 +51,27 @@ func (a *Archive) Stats(ctx context.Context) (*Stats, error) {
 		return nil, err
 	}
 	return &s, nil
+}
+
+// joinMoves stores the move list as a single space-separated string. Games
+// are replayed from it, never queried inside it, so a text column beats an
+// array or a join table here.
+func joinMoves(moves []string) string { return strings.Join(moves, " ") }
+
+// formatTime renders a scanned timestamp for JSON.
+func formatTime(v any) string {
+	if t, ok := v.(time.Time); ok {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return ""
+}
+
+// nullableUUID maps an empty user id to SQL NULL. An anonymous game has no
+// user, and "" is not a UUID, so it has to become NULL rather than fail the
+// column type.
+func nullableUUID(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
 }

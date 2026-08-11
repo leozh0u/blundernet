@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/leozh0u/blundernet/internal/store"
@@ -199,4 +200,51 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{"id": user.ID, "username": user.Username},
 	})
+}
+
+// requireUser is the guard for routes that have no anonymous meaning.
+func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) *store.User {
+	user := UserFrom(r.Context())
+	if user == nil {
+		httpError(w, http.StatusUnauthorized, "sign in first")
+		return nil
+	}
+	if s.archive == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return nil
+	}
+	return user
+}
+
+func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
+	user := s.requireUser(w, r)
+	if user == nil {
+		return
+	}
+	profile, err := s.archive.Profile(r.Context(), user.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, profile)
+}
+
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	user := s.requireUser(w, r)
+	if user == nil {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	// Keyset pagination: the caller passes back the finished_at of the last
+	// row it saw rather than an offset.
+	games, err := s.archive.History(r.Context(), user.ID, r.URL.Query().Get("before"), limit)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	var next string
+	if len(games) > 0 {
+		next = games[len(games)-1].FinishedAt
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"games": games, "next_before": next})
 }
