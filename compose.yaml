@@ -45,6 +45,12 @@ services:
       # Local compose serves plain http, and a Secure cookie is dropped
       # silently over http, so sessions would never stick.
       SECURE_COOKIES: "false"
+      # Wide open locally. Everything here shares one address, so the
+      # production limits would have repeated test runs throttling each
+      # other rather than testing anything. Format is "burst,per-second".
+      RATE_LIMIT_AUTH: "1000,100"
+      RATE_LIMIT_CREATE: "1000,100"
+      RATE_LIMIT_MOVE: "1000,100"
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://blundernet:blundernet@postgres:5432/blundernet
       SQS_ENDPOINT: http://elasticmq:9324

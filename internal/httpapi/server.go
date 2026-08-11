@@ -46,6 +46,14 @@ type Deps struct {
 	// failure looks like the session layer is broken.
 	SecureCookies bool
 	SessionTTL    time.Duration
+
+	// TrustProxy enables reading the client address from X-Forwarded-For.
+	// Only true when something we control terminates the connection first,
+	// since otherwise the header is attacker controlled.
+	TrustProxy bool
+
+	// Limits left at their zero value fall back to DefaultLimits.
+	Limits Limits
 }
 
 type Server struct {
@@ -56,7 +64,10 @@ type Server struct {
 	jobs          Enqueuer
 	rdb           *redis.Client
 	static        fs.FS
+	limiter       *store.Limiter
+	limits        Limits
 	secureCookies bool
+	trustProxy    bool
 	sessionTTL    time.Duration
 	handler       http.Handler
 }
@@ -71,18 +82,22 @@ func New(d Deps) *Server {
 	s := &Server{
 		games: d.Games, archive: d.Archive, users: d.Users, sessions: d.Sessions,
 		jobs: d.Jobs, rdb: d.Redis, static: d.Static,
-		secureCookies: d.SecureCookies, sessionTTL: d.SessionTTL,
+		secureCookies: d.SecureCookies, trustProxy: d.TrustProxy,
+		sessionTTL: d.SessionTTL, limits: d.Limits.withDefaults(),
+	}
+	if d.Redis != nil {
+		s.limiter = store.NewLimiter(d.Redis)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /version", s.handleVersion)
-	mux.HandleFunc("POST /api/auth/signup", s.handleSignup)
-	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
+	mux.HandleFunc("POST /api/auth/signup", s.limit("auth", s.limits.Auth, s.handleSignup))
+	mux.HandleFunc("POST /api/auth/login", s.limit("auth", s.limits.Auth, s.handleLogin))
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", s.handleMe)
-	mux.HandleFunc("POST /api/games", s.handleCreate)
+	mux.HandleFunc("POST /api/games", s.limit("create", s.limits.CreateGame, s.handleCreate))
 	mux.HandleFunc("GET /api/games/{id}", s.handleGet)
-	mux.HandleFunc("POST /api/games/{id}/moves", s.handleMove)
+	mux.HandleFunc("POST /api/games/{id}/moves", s.limit("move", s.limits.Move, s.handleMove))
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
 	mux.HandleFunc("GET /api/stats", s.handleStats)

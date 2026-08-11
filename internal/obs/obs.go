@@ -58,6 +58,17 @@ var (
 		Help: "Job deliveries by outcome (played, expired, stale, conflict, error).",
 	}, []string{"outcome"})
 
+	// Rate limits are a guess until there is traffic to tune them against,
+	// and the failure mode is silent: a limit set too tight just looks like
+	// people not playing. Counting refusals by group, and separately for
+	// signed-in and anonymous, is what makes that visible. Anonymous traffic
+	// shares a bucket per address, so a university behind one NAT is the case
+	// most likely to be squeezed.
+	rateLimited = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: ns, Name: "rate_limited_total",
+		Help: "Requests refused by the rate limiter, by route group and whether the caller was signed in.",
+	}, []string{"group", "identified"})
+
 	// A search costs roughly a quarter second, so these buckets sit an
 	// order of magnitude above the HTTP ones.
 	engineDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
@@ -70,7 +81,7 @@ var (
 func init() {
 	prometheus.MustRegister(
 		httpRequests, httpDuration, wsConnections,
-		gamesCreated, gamesFinished, workerJobs, engineDuration,
+		gamesCreated, gamesFinished, workerJobs, engineDuration, rateLimited,
 	)
 }
 
@@ -90,6 +101,12 @@ func GameCreated(color string)   { gamesCreated.WithLabelValues(color).Inc() }
 func GameFinished(result string) { gamesFinished.WithLabelValues(resultLabel(result)).Inc() }
 func WSOpened()                  { wsConnections.Inc() }
 func WSClosed()                  { wsConnections.Dec() }
+
+// RateLimited records a refusal. identified separates signed-in callers, who
+// get their own bucket, from anonymous ones sharing a bucket per address.
+func RateLimited(group string, identified bool) {
+	rateLimited.WithLabelValues(group, strconv.FormatBool(identified)).Inc()
+}
 
 // Collapsed to the three values a game can end in, so an unexpected
 // result cannot open an unbounded label space.

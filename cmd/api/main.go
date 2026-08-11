@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -54,6 +56,15 @@ func main() {
 			Redis:         rdb,
 			Static:        web.Dist(),
 			SecureCookies: envOr("SECURE_COOKIES", "true") != "false",
+			// Off by default. Reading X-Forwarded-For is only safe when
+			// something we control terminates the connection first, and
+			// getting that wrong hands every client a free rate-limit reset.
+			TrustProxy: envOr("TRUST_PROXY", "false") == "true",
+			Limits: httpapi.Limits{
+				Auth:       limitFromEnv("RATE_LIMIT_AUTH"),
+				CreateGame: limitFromEnv("RATE_LIMIT_CREATE"),
+				Move:       limitFromEnv("RATE_LIMIT_MOVE"),
+			},
 		})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -86,6 +97,29 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// limitFromEnv reads "burst,per-second", for example "10,0.5". An unset or
+// unparseable value returns the zero limit, which the server reads as "use
+// the default" rather than "allow nothing". Failing open matters here: a typo
+// in an environment variable should not lock everyone out of the site.
+func limitFromEnv(key string) store.Limit {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return store.Limit{}
+	}
+	burstStr, rateStr, ok := strings.Cut(raw, ",")
+	if !ok {
+		slog.Warn("ignoring malformed rate limit", "key", key, "value", raw)
+		return store.Limit{}
+	}
+	burst, err1 := strconv.Atoi(strings.TrimSpace(burstStr))
+	rate, err2 := strconv.ParseFloat(strings.TrimSpace(rateStr), 64)
+	if err1 != nil || err2 != nil || burst <= 0 || rate <= 0 {
+		slog.Warn("ignoring malformed rate limit", "key", key, "value", raw)
+		return store.Limit{}
+	}
+	return store.Limit{Burst: burst, Rate: rate}
 }
 
 // fatal logs through the same JSON handler as everything else and exits.

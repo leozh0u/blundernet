@@ -64,6 +64,17 @@ services:
       DATABASE_URL: postgres://blundernet:blundernet@postgres:5432/blundernet
       SQS_QUEUE_URL: ${queue_url}
       AWS_REGION: ${region}
+      # Caddy terminates the connection, so X-Forwarded-For here is written
+      # by our own proxy rather than by the client.
+      TRUST_PROXY: "true"
+      # Only mark session cookies Secure once Caddy has a certificate. On the
+      # bare-IP deployment the site is plain http and a Secure cookie would be
+      # dropped, so nobody could stay signed in.
+%{ if domain != "" ~}
+      SECURE_COOKIES: "true"
+%{ else ~}
+      SECURE_COOKIES: "false"
+%{ endif ~}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
