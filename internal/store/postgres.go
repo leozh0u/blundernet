@@ -9,18 +9,6 @@ import (
 	"github.com/leozh0u/blundernet/internal/game"
 )
 
-const schema = `
-CREATE TABLE IF NOT EXISTS games (
-    id           UUID PRIMARY KEY,
-    player_color TEXT NOT NULL CHECK (player_color IN ('white','black')),
-    result       TEXT NOT NULL,
-    termination  TEXT NOT NULL,
-    moves        TEXT NOT NULL,
-    ply          INT  NOT NULL,
-    created_at   TIMESTAMPTZ NOT NULL,
-    finished_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);`
-
 type Archive struct {
 	pool *pgxpool.Pool
 }
@@ -30,32 +18,16 @@ func NewArchive(ctx context.Context, url string) (*Archive, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := initSchema(ctx, pool); err != nil {
+	if err := migrate(ctx, pool); err != nil {
 		pool.Close()
 		return nil, err
 	}
 	return &Archive{pool: pool}, nil
 }
 
-// initSchema serializes DDL across instances with an advisory lock.
-// Several replicas boot against a fresh database at the same time, and
-// concurrent CREATE TABLE IF NOT EXISTS calls can still collide on the
-// catalog; the lock makes first-boot deterministic. Advisory locks are
-// session-scoped, so everything runs on one pooled connection.
-func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	const lockKey = 894273041 // arbitrary app-wide constant
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
-		return err
-	}
-	defer conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
-	_, err = conn.Exec(ctx, schema)
-	return err
-}
+// Pool exposes the connection pool to the other stores in this package that
+// share the database.
+func (a *Archive) Pool() *pgxpool.Pool { return a.pool }
 
 func (a *Archive) Close() { a.pool.Close() }
 
