@@ -1,0 +1,202 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"regexp"
+	"time"
+
+	"github.com/leozh0u/blundernet/internal/store"
+)
+
+const sessionCookie = "bn_session"
+
+// Passwords are capped as well as floored. Argon2id reads the whole input, so
+// an unbounded password is a cheap way to make the server do 64MB of work per
+// megabyte submitted.
+const (
+	minPasswordLen = 8
+	maxPasswordLen = 128
+)
+
+var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,20}$`)
+
+type ctxKey int
+
+const userCtxKey ctxKey = iota
+
+// UserFrom returns the signed-in user, or nil. Anonymous play stays
+// supported, so every caller has to handle nil rather than assuming a user.
+func UserFrom(ctx context.Context) *store.User {
+	u, _ := ctx.Value(userCtxKey).(*store.User)
+	return u
+}
+
+// withUser resolves the session cookie onto the request context. It never
+// rejects: routes that require a user check for themselves, and the rest of
+// the site works signed out.
+func (s *Server) withUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := s.lookupSession(r)
+		if user != nil {
+			r = r.WithContext(context.WithValue(r.Context(), userCtxKey, user))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) lookupSession(r *http.Request) *store.User {
+	if s.users == nil {
+		return nil
+	}
+	c, err := r.Cookie(sessionCookie)
+	if err != nil || c.Value == "" {
+		return nil
+	}
+	userID, err := s.sessions.Lookup(r.Context(), c.Value)
+	if err != nil {
+		return nil
+	}
+	user, err := s.users.ByID(r.Context(), userID)
+	if err != nil {
+		return nil
+	}
+	return user
+}
+
+// secureCookies is off for local http development and on everywhere else.
+// A Secure cookie is dropped silently over plain http, which makes local
+// login fail in a way that looks like the session layer is broken.
+func (s *Server) setSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		// Lax rather than Strict. Strict would drop the cookie when someone
+		// follows a link into the site and make them look signed out on
+		// arrival. Lax still withholds it from cross-site POSTs, which is the
+		// CSRF case that matters here.
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(maxAge.Seconds()),
+	})
+}
+
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
+type credentials struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (c credentials) validate() string {
+	if !usernamePattern.MatchString(c.Username) {
+		return "username must be 3 to 20 characters, letters, numbers, underscore or hyphen"
+	}
+	if len(c.Password) < minPasswordLen {
+		return "password must be at least 8 characters"
+	}
+	if len(c.Password) > maxPasswordLen {
+		return "password must be at most 128 characters"
+	}
+	return ""
+}
+
+func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
+	if s.users == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return
+	}
+	var creds credentials
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		httpError(w, http.StatusBadRequest, "body must be {\"username\": \"\", \"password\": \"\"}")
+		return
+	}
+	if msg := creds.validate(); msg != "" {
+		httpError(w, http.StatusBadRequest, msg)
+		return
+	}
+
+	user, err := s.users.Create(r.Context(), creds.Username, creds.Password)
+	if errors.Is(err, store.ErrUsernameTaken) {
+		httpError(w, http.StatusConflict, "that username is taken")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	s.startSession(w, r, user, http.StatusCreated)
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.users == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return
+	}
+	var creds credentials
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		httpError(w, http.StatusBadRequest, "body must be {\"username\": \"\", \"password\": \"\"}")
+		return
+	}
+	// Deliberately not validated the way signup is. Rejecting a short password
+	// here would tell an attacker the rules without an account, and a
+	// credential that cannot exist simply will not match.
+	user, err := s.users.Authenticate(r.Context(), creds.Username, creds.Password)
+	if errors.Is(err, store.ErrBadCredentials) {
+		httpError(w, http.StatusUnauthorized, "wrong username or password")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	s.startSession(w, r, user, http.StatusOK)
+}
+
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *store.User, code int) {
+	token, err := s.sessions.Create(r.Context(), user.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	s.setSessionCookie(w, token, s.sessionTTL)
+	writeJSON(w, code, map[string]string{"id": user.ID, "username": user.Username})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		// Destroy the record, not just the cookie. Clearing the cookie alone
+		// leaves a token that still works if it was captured.
+		if err := s.sessions.Destroy(r.Context(), c.Value); err != nil {
+			internalError(w, err)
+			return
+		}
+	}
+	s.clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	user := UserFrom(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"user": nil})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]string{"id": user.ID, "username": user.Username},
+	})
+}

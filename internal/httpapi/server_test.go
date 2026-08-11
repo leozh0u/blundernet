@@ -32,7 +32,7 @@ func newTestServer(t *testing.T) (*Server, *captureQueue) {
 	q := &captureQueue{}
 	static := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("test")}}
 	// No archive in unit tests; the failure path is guarded.
-	return New(store.NewGames(rdb), nil, q, rdb, static), q
+	return New(Deps{Games: store.NewGames(rdb), Jobs: q, Redis: rdb, Static: static}), q
 }
 
 func do(t *testing.T, s *Server, method, path, body string) *httptest.ResponseRecorder {

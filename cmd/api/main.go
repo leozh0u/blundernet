@@ -45,8 +45,16 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:              ":" + envOr("PORT", "8080"),
-		Handler:           obs.Middleware(httpapi.New(games, archive, jobs, rdb, web.Dist())),
+		Addr: ":" + envOr("PORT", "8080"),
+		Handler: obs.Middleware(httpapi.New(httpapi.Deps{
+			Games:         games,
+			Archive:       archive,
+			Users:         store.NewUsers(archive.Pool()),
+			Jobs:          jobs,
+			Redis:         rdb,
+			Static:        web.Dist(),
+			SecureCookies: envOr("SECURE_COOKIES", "true") != "false",
+		})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

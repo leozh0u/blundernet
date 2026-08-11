@@ -49,4 +49,39 @@ total=$(curl -sf "$BASE/api/stats" | json "['total']")
 [ "$total" -ge 1 ] || { echo "   stats empty after resign" >&2; exit 1; }
 echo "   stats: $(curl -sf "$BASE/api/stats")"
 
+echo "6. accounts: signup, session, logout"
+jar=$(mktemp)
+user="e2e_$RANDOM$RANDOM"
+
+# Signed out, /me reports no user rather than 401. Anonymous play is supported,
+# so the frontend asks this on every load and must not treat it as an error.
+who=$(curl -sf "$BASE/api/auth/me" | json "['user']")
+[ "$who" = "None" ] || { echo "   expected no user before signup, got $who" >&2; exit 1; }
+
+curl -sf -c "$jar" -X POST "$BASE/api/auth/signup" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$user\",\"password\":\"correct horse battery\"}" > /dev/null
+name=$(curl -sf -b "$jar" "$BASE/api/auth/me" | json "['user']['username']")
+[ "$name" = "$user" ] || { echo "   session did not resolve, got $name" >&2; exit 1; }
+echo "   signed up and session resolves as $name"
+
+# Same username again must lose to the unique index, not create a second row.
+# tr rather than ${user^^}, which needs bash 4 and macOS ships 3.2.
+upper=$(printf '%s' "$user" | tr '[:lower:]' '[:upper:]')
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/signup" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$upper\",\"password\":\"correct horse battery\"}")
+[ "$code" = "409" ] || { echo "   expected 409 on duplicate username, got $code" >&2; exit 1; }
+echo "   duplicate username rejected case insensitively"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$user\",\"password\":\"wrong password\"}")
+[ "$code" = "401" ] || { echo "   expected 401 on bad password, got $code" >&2; exit 1; }
+
+curl -sf -b "$jar" -c "$jar" -X POST "$BASE/api/auth/logout" > /dev/null
+who=$(curl -sf -b "$jar" "$BASE/api/auth/me" | json "['user']")
+[ "$who" = "None" ] || { echo "   still signed in after logout" >&2; exit 1; }
+echo "   logout revoked the session"
+rm -f "$jar"
+
 echo "e2e ok"

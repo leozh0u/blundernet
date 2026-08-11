@@ -29,20 +29,57 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, j queue.Job) error
 }
 
-type Server struct {
-	games   *store.Games
-	archive *store.Archive
-	jobs    Enqueuer
-	rdb     *redis.Client
-	static  fs.FS
-	mux     *http.ServeMux
+// Deps is a struct rather than a positional list because the constructor had
+// grown past the point where five bare arguments at a call site said anything
+// about which was which.
+type Deps struct {
+	Games    *store.Games
+	Archive  *store.Archive // nil disables the archive and stats
+	Users    *store.Users   // nil disables accounts; the site still plays
+	Sessions *store.Sessions
+	Jobs     Enqueuer
+	Redis    *redis.Client
+	Static   fs.FS
+
+	// SecureCookies should be false only for local http development, because
+	// a Secure cookie is dropped silently over plain http and the resulting
+	// failure looks like the session layer is broken.
+	SecureCookies bool
+	SessionTTL    time.Duration
 }
 
-func New(games *store.Games, archive *store.Archive, jobs Enqueuer, rdb *redis.Client, static fs.FS) *Server {
-	s := &Server{games: games, archive: archive, jobs: jobs, rdb: rdb, static: static}
+type Server struct {
+	games         *store.Games
+	archive       *store.Archive
+	users         *store.Users
+	sessions      *store.Sessions
+	jobs          Enqueuer
+	rdb           *redis.Client
+	static        fs.FS
+	secureCookies bool
+	sessionTTL    time.Duration
+	handler       http.Handler
+}
+
+func New(d Deps) *Server {
+	if d.SessionTTL == 0 {
+		d.SessionTTL = 30 * 24 * time.Hour
+	}
+	if d.Sessions == nil && d.Redis != nil {
+		d.Sessions = store.NewSessions(d.Redis, d.SessionTTL)
+	}
+	s := &Server{
+		games: d.Games, archive: d.Archive, users: d.Users, sessions: d.Sessions,
+		jobs: d.Jobs, rdb: d.Redis, static: d.Static,
+		secureCookies: d.SecureCookies, sessionTTL: d.SessionTTL,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /version", s.handleVersion)
+	mux.HandleFunc("POST /api/auth/signup", s.handleSignup)
+	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
+	mux.HandleFunc("GET /api/auth/me", s.handleMe)
 	mux.HandleFunc("POST /api/games", s.handleCreate)
 	mux.HandleFunc("GET /api/games/{id}", s.handleGet)
 	mux.HandleFunc("POST /api/games/{id}/moves", s.handleMove)
@@ -51,12 +88,16 @@ func New(games *store.Games, archive *store.Archive, jobs Enqueuer, rdb *redis.C
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/status", s.handleStatusJSON)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
-	mux.Handle("GET /", spaHandler(static))
-	s.mux = mux
+	mux.Handle("GET /", spaHandler(d.Static))
+
+	// Session resolution wraps the mux rather than sitting on each route, so
+	// a route added later cannot forget it. It never rejects, which is what
+	// keeps the anonymous paths working.
+	s.handler = s.withUser(mux)
 	return s
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
 
 // State is the wire representation of a game, shared by REST responses and
 // WebSocket events so clients render from one shape.
