@@ -7,12 +7,14 @@ import { auth, displayRating } from './auth.js'
 export default function Account({ refreshKey }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [loaded, setLoaded] = useState(false)
   const [form, setForm] = useState(null) // null, 'signup' or 'login'
 
   const load = useCallback(async () => {
     const [u, p] = await Promise.all([auth.me(), auth.profile()])
     setUser(u)
     setProfile(p)
+    setLoaded(true)
   }, [])
 
   // refreshKey changes when a game ends, which is the only time the rating
@@ -23,6 +25,18 @@ export default function Account({ refreshKey }) {
 
   const rating = displayRating(profile)
   const isGuest = !user || user.guest
+
+  // Reserve the space before the numbers arrive, so the strip does not jump
+  // the page down once it loads.
+  if (!loaded) {
+    return (
+      <div className="account">
+        <span className="skeleton skel-rating" aria-hidden="true" />
+        <span className="skeleton skel-name" aria-hidden="true" />
+        <span className="visually-hidden">Loading your account</span>
+      </div>
+    )
+  }
 
   return (
     <div className="account">

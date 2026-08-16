@@ -326,6 +326,10 @@ export default function App() {
         <a href="https://github.com/leozh0u/blundernet-engine">The engine</a>
         <span aria-hidden="true"> · </span>
         <a href="/status">Status</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/privacy">Privacy</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/terms">Terms</a>
       </footer>
     </div>
   )

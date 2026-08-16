@@ -105,6 +105,8 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/me/games", s.handleHistory)
 	mux.HandleFunc("GET /api/status", s.handleStatusJSON)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
+	mux.HandleFunc("GET /privacy", s.handlePrivacy)
+	mux.HandleFunc("GET /terms", s.handleTerms)
 	mux.Handle("GET /", spaHandler(d.Static))
 
 	// Session resolution wraps the mux rather than sitting on each route, so
