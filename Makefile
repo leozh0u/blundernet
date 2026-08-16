@@ -1,6 +1,6 @@
 # Local development ------------------------------------------------------
 
-.PHONY: test build up down e2e loadtest deploy push destroy demo-deploy demo-update demo-destroy
+.PHONY: test build up down e2e loadtest puzzles deploy push destroy demo-deploy demo-update demo-destroy
 
 test:
 	go vet ./...
@@ -18,6 +18,16 @@ down:
 
 e2e:
 	./scripts/e2e.sh
+
+# Import the Lichess CC0 puzzle database, ~6.1M puzzles. The file is 300MB
+# compressed and is streamed rather than kept, so re-running this monthly is
+# how puzzle ratings stay current. PUZZLE_ARGS passes flags through, for
+# example PUZZLE_ARGS="-limit 100000" for a quick local set.
+PUZZLE_URL ?= https://database.lichess.org/lichess_db_puzzle.csv.zst
+DATABASE_URL ?= postgres://blundernet:blundernet@localhost:5432/blundernet
+
+puzzles:
+	curl -fsSL $(PUZZLE_URL) | zstd -dc | DATABASE_URL=$(DATABASE_URL) go run ./cmd/puzzleload $(PUZZLE_ARGS)
 
 loadtest:
 	k6 run loadtest/game_flow.js

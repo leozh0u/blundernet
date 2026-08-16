@@ -127,6 +127,36 @@ func (p *Puzzles) Analyze(ctx context.Context) error {
 	return err
 }
 
+// RefreshCells rebuilds the cell summary the sampler draws from. Called by the
+// loader, because the counts only change when an import does.
+func (p *Puzzles) RefreshCells(ctx context.Context) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
+
+	if _, err := tx.Exec(ctx, "DELETE FROM puzzle_cells"); err != nil {
+		return err
+	}
+	// The '' rows count whole cells, the rest count one theme inside a cell.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO puzzle_cells (theme, rating_band, phase, solution_plies, n)
+		SELECT '', rating_band, phase, solution_plies, count(*)
+		FROM puzzles
+		GROUP BY 2, 3, 4`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO puzzle_cells (theme, rating_band, phase, solution_plies, n)
+		SELECT theme, rating_band, phase, solution_plies, count(*)
+		FROM puzzles, unnest(themes) AS theme
+		GROUP BY 1, 2, 3, 4`); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // copySource adapts a PuzzleSource to the pgx COPY interface. Errors from the
 // underlying source surface through Err, which is where pgx looks.
 type copySource struct {

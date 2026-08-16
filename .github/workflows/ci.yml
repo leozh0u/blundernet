@@ -8,6 +8,21 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    # The puzzle sampler is mostly SQL, so its tests want a real Postgres
+    # rather than a fake. They skip when TEST_DATABASE_URL is unset, which is
+    # how they stay runnable on a laptop with nothing started.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: blundernet
+          POSTGRES_PASSWORD: blundernet
+          POSTGRES_DB: blundernet_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U blundernet"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -18,6 +33,8 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
+        env:
+          TEST_DATABASE_URL: postgres://blundernet:blundernet@localhost:5432/blundernet_test
         run: go test ./...
       - name: Build
         run: go build ./...

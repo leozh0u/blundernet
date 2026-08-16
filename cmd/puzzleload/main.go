@@ -90,6 +90,9 @@ func run(ctx context.Context, dbURL, file string, limit, minPopularity int, maxD
 	}
 	loaded := time.Since(start)
 
+	if err := puzzles.RefreshCells(ctx); err != nil {
+		return fmt.Errorf("refresh cells: %w", err)
+	}
 	if err := puzzles.Analyze(ctx); err != nil {
 		return fmt.Errorf("analyze: %w", err)
 	}
