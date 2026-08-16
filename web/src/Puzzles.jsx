@@ -87,6 +87,8 @@ function filterToQuery(f) {
 
 const uciOf = (mv) => mv.from + mv.to + (mv.promotion || '')
 
+const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }
+
 export default function Puzzles() {
   const [filter, setFilter] = useState(filterFromURL)
   const [queue, setQueue] = useState([])
@@ -95,6 +97,7 @@ export default function Puzzles() {
   const [step, setStep] = useState(0) // how far into the solution we are
   const [phase, setPhase] = useState('loading') // loading, solving, solved, failed, empty
   const [selected, setSelected] = useState(null)
+  const [hints, setHints] = useState(0)
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
@@ -129,6 +132,7 @@ export default function Puzzles() {
       setPuzzle(p)
       setStep(0)
       setSelected(null)
+      setHints(0)
       setPhase('setup')
       const before = new Chess(p.fen)
       setBoard(before)
@@ -244,7 +248,7 @@ export default function Puzzles() {
     if (!right) {
       setBoard(probe)
       setPhase('failed')
-      record(puzzle.id, false, 0)
+      record(puzzle.id, false, hints)
       const truth = new Chess(board.fen())
       revealFrom(truth, puzzle.solution, step)
       return true
@@ -263,7 +267,7 @@ export default function Puzzles() {
     if (nextStep >= puzzle.solution.length) {
       setStep(nextStep)
       setPhase('solved')
-      record(puzzle.id, true, 0)
+      record(puzzle.id, true, hints)
       return true
     }
     const reply = puzzle.solution[nextStep]
@@ -295,6 +299,27 @@ export default function Puzzles() {
     return board.moves({ square: selected, verbose: true }).map((m) => m.to)
   }, [selected, board])
 
+  // Hints come from the solution the browser already has, so they cost no
+  // round trip. They go piece, then square, then the move itself, and the
+  // count is sent with the attempt: solving cold and solving after three
+  // hints are different things and the wrong-answer list should know.
+  const hint = useMemo(() => {
+    if (!puzzle || !board || hints === 0 || phase !== 'solving') return null
+    const want = puzzle.solution[step]
+    if (!want) return null
+    const from = want.slice(0, 2)
+    const piece = board.get(from)
+    if (hints === 1) return { text: `Move the ${PIECE_NAMES[piece?.type] || 'piece'}.` }
+    if (hints === 2) return { text: `The ${PIECE_NAMES[piece?.type] || 'piece'} on ${from} moves.`, from }
+    const probe = new Chess(board.fen())
+    const mv = probe.move({
+      from,
+      to: want.slice(2, 4),
+      promotion: want[4] || undefined,
+    })
+    return { text: `Play ${mv ? mv.san : want}.`, from }
+  }, [puzzle, board, hints, step, phase])
+
   const squareStyles = useMemo(() => {
     const styles = {}
     const history = board?.history({ verbose: true }) || []
@@ -304,6 +329,9 @@ export default function Puzzles() {
         styles[sq] = { background: 'rgba(203, 150, 60, 0.38)' }
       }
     }
+    if (hint?.from) {
+      styles[hint.from] = { background: 'rgba(129, 182, 76, 0.55)' }
+    }
     if (selected) styles[selected] = { background: 'rgba(203, 150, 60, 0.55)' }
     for (const sq of legalTargets) {
       styles[sq] = {
@@ -312,7 +340,7 @@ export default function Puzzles() {
       }
     }
     return styles
-  }, [selected, legalTargets, board])
+  }, [selected, legalTargets, board, hint])
 
   const apply = (patch) => {
     const f = { ...filter, ...patch }
@@ -455,9 +483,11 @@ export default function Puzzles() {
                     {puzzle.color === 'white' ? 'White' : 'Black'} to play
                   </span>
                   <span className="hint">
-                    {puzzle.moves === 1
-                      ? 'One move wins it.'
-                      : `${puzzle.moves} moves, and only one line works.`}
+                    {hint
+                      ? hint.text
+                      : puzzle.moves === 1
+                        ? 'One move wins it.'
+                        : `${puzzle.moves} moves, and only one line works.`}
                   </span>
                 </>
               )}
@@ -492,6 +522,16 @@ export default function Puzzles() {
                     <dd>{titleCase(puzzle.phase)}</dd>
                   </div>
                 </dl>
+                {(phase === 'solved' || phase === 'failed') && puzzle.explanation && (
+                  <div className="explain">
+                    <p className="headline">{puzzle.explanation.headline}</p>
+                    {(puzzle.explanation.points || []).map((pt) => (
+                      <p key={pt} className="point">
+                        {pt}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {(phase === 'solved' || phase === 'failed') && (
                   <ul className="themes">
                     {puzzle.themes
@@ -521,9 +561,18 @@ export default function Puzzles() {
             )}
 
             {phase === 'solving' && (
-              <button className="ghost wide" onClick={next}>
-                Skip
-              </button>
+              <div className="during">
+                <button
+                  className="ghost wide"
+                  disabled={hints >= 3}
+                  onClick={() => setHints((h) => Math.min(3, h + 1))}
+                >
+                  {hints === 0 ? 'Hint' : hints < 3 ? 'Another hint' : 'No more hints'}
+                </button>
+                <button className="ghost wide" onClick={next}>
+                  Skip
+                </button>
+              </div>
             )}
           </aside>
         </div>

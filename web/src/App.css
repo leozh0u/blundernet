@@ -908,3 +908,39 @@ button {
     width: auto;
   }
 }
+
+/* The explanation, which is assembled from the tags and the position the
+   solution reaches rather than written by anything. */
+.explain {
+  padding: 0.5rem 0.75rem 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.explain .headline {
+  font-weight: 600;
+  font-size: 0.97rem;
+}
+
+.explain .point {
+  font-size: 0.94rem;
+  color: var(--ink-soft);
+}
+
+.during {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.during .ghost.wide {
+  margin-top: 0;
+}
+
+.during button:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.during button:disabled:hover {
+  border-color: var(--line-strong);
+}

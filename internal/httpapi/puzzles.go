@@ -20,16 +20,17 @@ import (
 // are checked one at a time, because a rating that moves is worth protecting
 // and a drill is not.
 type puzzleView struct {
-	ID        string   `json:"id"`
-	FEN       string   `json:"fen"`
-	SetupMove string   `json:"setup_move"`
-	Solution  []string `json:"solution,omitempty"`
-	Color     string   `json:"color"`
-	Rating    int      `json:"rating"`
-	Moves     int      `json:"moves"`
-	Phase     string   `json:"phase"`
-	Themes    []string `json:"themes"`
-	GameURL   string   `json:"game_url,omitempty"`
+	ID          string              `json:"id"`
+	FEN         string              `json:"fen"`
+	SetupMove   string              `json:"setup_move"`
+	Solution    []string            `json:"solution,omitempty"`
+	Color       string              `json:"color"`
+	Rating      int                 `json:"rating"`
+	Moves       int                 `json:"moves"`
+	Phase       string              `json:"phase"`
+	Themes      []string            `json:"themes"`
+	GameURL     string              `json:"game_url,omitempty"`
+	Explanation *puzzle.Explanation `json:"explanation,omitempty"`
 }
 
 func toPuzzleView(p puzzle.Puzzle, withSolution bool) puzzleView {
@@ -43,6 +44,12 @@ func toPuzzleView(p puzzle.Puzzle, withSolution bool) puzzleView {
 	}
 	if withSolution {
 		v.Solution = p.Solution()
+		// Derived here rather than in the browser so ranked mode, which never
+		// ships a solution, can use the same sentence later. A row whose moves
+		// do not replay gets no explanation instead of a wrong one.
+		if e, ok := puzzle.Explain(p); ok {
+			v.Explanation = &e
+		}
 	}
 	return v
 }
