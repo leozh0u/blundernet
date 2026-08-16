@@ -105,7 +105,7 @@ Redis stores the SHA-256 of the token rather than the token, so dumping the
 keyspace does not hand over live sessions. The token is random, so a fast hash
 is fine; there is nothing to brute force the way there is with a password.
 
-**Alternatives:** JWTs genuinely win when you have many services that must
+**Alternatives:** JWTs do win when you have many services that must
 verify without a shared datastore. Not the case here.
 
 ### Guests are real user rows
