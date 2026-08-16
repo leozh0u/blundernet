@@ -46,8 +46,11 @@ variable "engine_sims" {
 # Set to a domain you own (with an A record pointing at the instance's
 # public IP) to switch the proxy from plain HTTP to automatic HTTPS.
 variable "domain" {
-  type    = string
-  default = ""
+  type = string
+  # Recorded here rather than passed at the command line, so a plain apply
+  # cannot silently drop the site back to plain HTTP. Caddy only requests a
+  # certificate when it knows the name it is serving.
+  default = "blundernet.com"
 }
 
 data "aws_ami" "al2023" {
@@ -158,6 +161,8 @@ resource "aws_instance" "demo" {
     volume_type = "gp3"
   }
 
+  # Any edit to the boot script replaces the instance. The database lives on
+  # a separate volume for exactly that reason.
   user_data_replace_on_change = true
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     region      = var.region
@@ -168,6 +173,35 @@ resource "aws_instance" "demo" {
     engine_sims = var.engine_sims
     domain      = var.domain
   })
+}
+
+# Postgres data lives here rather than on the root volume, because the root
+# volume dies with the instance and every boot-script change replaces the
+# instance. Losing the accounts and game history on a config edit is not a
+# trade worth making for one less resource.
+resource "aws_ebs_volume" "data" {
+  availability_zone = aws_instance.demo.availability_zone
+  size              = 8
+  type              = "gp3"
+  encrypted         = true
+
+  # The whole point is surviving instance replacement, so refuse to destroy it
+  # by accident. Removing it takes an explicit lifecycle change first.
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = { Name = "${var.name}-data" }
+}
+
+resource "aws_volume_attachment" "data" {
+  device_name = "/dev/sdf"
+  volume_id   = aws_ebs_volume.data.id
+  instance_id = aws_instance.demo.id
+
+  # Let the volume detach when the instance is replaced rather than blocking
+  # the apply on a device the dying instance still holds.
+  force_detach = true
 }
 
 # Stable address so the public link survives instance replacement.

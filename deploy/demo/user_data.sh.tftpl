@@ -13,11 +13,43 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 mkdir -p /opt/blundernet
 
+# The database lives on a volume that outlives this instance. Wait for the
+# attachment, format it only if it has never been used, and mount it. Doing
+# this by NVMe serial rather than device name because Nitro renames /dev/sdf.
+DATA_DEV=""
+for _ in $(seq 1 60); do
+  for candidate in /dev/nvme?n1; do
+    [ -b "$candidate" ] || continue
+    # The root volume is the one carrying a mounted filesystem already.
+    if ! lsblk -no MOUNTPOINTS "$candidate" | grep -q '/$'; then
+      DATA_DEV="$candidate"
+      break
+    fi
+  done
+  [ -n "$DATA_DEV" ] && break
+  sleep 5
+done
+
+if [ -n "$DATA_DEV" ]; then
+  # blkid exits non-zero on an unformatted device, which is how a first boot
+  # is told apart from a replacement that should keep its data.
+  if ! blkid "$DATA_DEV" >/dev/null 2>&1; then
+    mkfs -t xfs "$DATA_DEV"
+  fi
+  mkdir -p /var/lib/blundernet
+  mount "$DATA_DEV" /var/lib/blundernet
+  echo "$DATA_DEV /var/lib/blundernet xfs defaults,nofail 0 2" >> /etc/fstab
+  mkdir -p /var/lib/blundernet/pgdata
+else
+  echo "no data volume found; falling back to instance storage" >&2
+  mkdir -p /var/lib/blundernet/pgdata
+fi
+
 # Caddy terminates TLS automatically when a domain is set; without one it
 # just proxies plain HTTP on port 80.
 %{ if domain != "" ~}
 cat >/opt/blundernet/Caddyfile <<'CADDY'
-${domain} {
+${domain}, www.${domain} {
   reverse_proxy api:8080
 }
 CADDY
@@ -39,7 +71,7 @@ services:
       POSTGRES_PASSWORD: blundernet
       POSTGRES_DB: blundernet
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - /var/lib/blundernet/pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U blundernet"]
       interval: 5s
@@ -102,7 +134,6 @@ services:
       - api
 
 volumes:
-  pgdata:
   caddydata:
 COMPOSE
 
