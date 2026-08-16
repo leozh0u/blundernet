@@ -3,6 +3,7 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import SearchTree from './SearchTree.jsx'
 import Account from './Account.jsx'
+import Puzzles from './Puzzles.jsx'
 
 const api = {
   async createGame(color) {
@@ -69,7 +70,15 @@ function outcome(state) {
     : { kind: 'loss', title: 'Defeat', flavour: 'The automaton prevails.' }
 }
 
+// Two pages, and no router library for two pages. The path is read on load
+// and pushed on a click, so both are linkable and the back button works. The
+// server already serves index.html for any path.
+function routeOf(path) {
+  return path.startsWith('/puzzles') ? 'puzzles' : 'play'
+}
+
 export default function App() {
+  const [route, setRoute] = useState(() => routeOf(window.location.pathname))
   const [state, setState] = useState(null)
   // Bumped when a game reaches a terminal state, which is the only moment the
   // rating can have moved. Polling the profile on a timer would be busywork.
@@ -84,6 +93,17 @@ export default function App() {
   }, [state?.status])
 
   useEffect(() => () => wsRef.current?.close(), [])
+
+  useEffect(() => {
+    const onPop = () => setRoute(routeOf(window.location.pathname))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  const go = (to) => {
+    window.history.pushState({}, '', to === 'puzzles' ? '/puzzles' : '/')
+    setRoute(to)
+  }
 
   const connect = useCallback((id) => {
     wsRef.current?.close()
@@ -193,7 +213,15 @@ export default function App() {
             <span>Play a neural network</span>
           </p>
         </div>
-        {stats && stats.total > 0 && (
+        <nav className="nav">
+          <button className={route === 'play' ? 'on' : ''} onClick={() => go('play')}>
+            Play
+          </button>
+          <button className={route === 'puzzles' ? 'on' : ''} onClick={() => go('puzzles')}>
+            Puzzles
+          </button>
+        </nav>
+        {route === 'play' && stats && stats.total > 0 && (
           <dl className="ledger">
             <div>
               <dt>Games</dt>
@@ -215,7 +243,9 @@ export default function App() {
         )}
       </header>
 
-      {!state ? (
+      {route === 'puzzles' ? (
+        <Puzzles />
+      ) : !state ? (
         <section className="lobby">
           <h2>Play the engine</h2>
           <p>

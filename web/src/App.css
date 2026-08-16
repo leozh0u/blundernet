@@ -694,3 +694,217 @@ button {
   font-size: 0.94rem;
   color: var(--ink-faint);
 }
+
+/* ---------- nav ---------- */
+/* Two destinations, so tabs rather than a sidebar. The current one is marked
+   by the same green that marks every other live thing on the page. */
+.nav {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.nav button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.nav button:hover {
+  color: var(--ink);
+}
+
+.nav button.on {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- puzzles ---------- */
+.puzzles {
+  padding-top: 1.25rem;
+}
+
+.filters {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.filter-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  width: 4.5rem;
+  flex: none;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.chips {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.chip:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.chip.on {
+  background: var(--green);
+  border-color: var(--green);
+  color: #14200a;
+  font-weight: 600;
+}
+
+.theme-select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.puzzle-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  gap: 1.5rem;
+  align-items: start;
+  padding-top: 1.25rem;
+}
+
+.state.wrong {
+  background: rgba(224, 121, 111, 0.12);
+  color: var(--danger);
+}
+
+.state.wrong .hint {
+  color: var(--danger);
+  opacity: 0.75;
+}
+
+.meta {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.meta div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+
+.meta dt {
+  color: var(--ink-faint);
+}
+
+.meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
+  list-style: none;
+}
+
+.themes li {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.after {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.after .wide {
+  width: 100%;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  background: var(--green);
+  color: #14200a;
+  font-size: 0.97rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.after .wide:hover {
+  background: var(--green-deep);
+}
+
+.after .ghost.wide {
+  margin-top: 0;
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.after .ghost.wide:hover {
+  background: var(--surface);
+  border-color: var(--ink-faint);
+}
+
+.after .source {
+  text-align: center;
+  font-size: 0.94rem;
+  color: var(--ink-faint);
+}
+
+.puzzle-empty {
+  padding: 2rem 0;
+  max-width: 34rem;
+}
+
+.puzzle-empty p {
+  color: var(--ink-soft);
+}
+
+@media (max-width: 820px) {
+  .puzzle-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .filter-label {
+    width: auto;
+  }
+}
