@@ -149,6 +149,94 @@ unavailable is worse than briefly not limiting.
 a boundary. A sliding window log is exact and stores every request timestamp.
 Token bucket is the usual middle.
 
+### Import the puzzles, do not generate them
+
+Lichess re-analysed 600 million games with Stockfish NNUE to build their puzzle
+set and spent over 100 years of CPU time doing it. They publish the result
+under CC0: 6.1 million puzzles, rated and theme-tagged. Building a generator
+first means spending months to catch up to something already given away.
+
+So the corpus is imported and the **search** is the product. Neither Lichess
+nor chess.com lets you ask for twenty three-move knight forks in an endgame at
+1600 and drill exactly that.
+
+The import is `cmd/puzzleload`: stream the CSV, derive the filter columns in
+Go, `COPY` into an unlogged staging table, then one `INSERT ... SELECT` with
+`ON CONFLICT DO UPDATE`. **6,100,960 rows in 103 seconds**, none skipped. Two
+steps rather than one because the load is re-run monthly against a fresh dump
+to refresh ratings, and a straight COPY would collide on every existing row
+while a per-row upsert of six million rows would take hours. Unlogged staging
+skips the write-ahead log, and the thing it gives up, surviving a crash, is
+exactly what a re-runnable import does not need.
+
+### Picking a random puzzle out of six million
+
+`ORDER BY random()` sorts the whole matching set. Measured on the real import:
+**1.4 seconds** for a rating band, because the planner bitmap-scanned 290k rows
+and top-N sorted them.
+
+The fix is a stored pseudo-random ordering, `sample_key`, derived from
+`md5(id)` rather than `random()` so a puzzle keeps its place in the shuffle
+across a reload. Selection becomes a range scan from a random cursor, which
+touches only the rows it returns.
+
+For that scan to come out in shuffled order, `sample_key` has to be the last
+column of the index and **every column before it has to be an equality**. A
+btree can only range on its final column. That is why rating is bucketed into
+`rating_band` of 100: a band is an equality, the exact rating stays as a
+recheck. It is also why selection happens inside one **cell**, one exact
+(band, phase, length), rather than across a filter's whole span. Postgres will
+not produce ordered output from a multi-value array on a leading index column;
+it gives up and sequential scans six million rows.
+
+Measured with the full import, `(rating_band, phase, solution_plies,
+sample_key)`:
+
+| query | before | after |
+|---|---|---|
+| rating band, ordered by sample_key | 1372ms | **0.9ms** |
+| same, plus a common theme | | 4.5ms |
+| same, plus a rare theme (bitmap AND with the GIN index) | | 7.8ms |
+
+Two things follow from splitting by cell. Cells must be drawn **in proportion
+to their size**, or a filter spanning them makes a thirteen-move puzzle as
+likely as a three-move one: there are 3.4M of the latter and one of the former.
+And the scan **wraps**: a cursor landing near the end of the shuffle would
+otherwise make the tail of every cell unreachable. There is a test that drains
+a small cell to prove every puzzle can be reached.
+
+The counts come from `puzzle_cells`, a summary rebuilt by the loader. It is
+keyed by theme as well, with `theme = ''` counting the whole cell, because a
+theme is a recheck rather than an index column: drawing cells blind for
+`smotheredMate`, which is one puzzle in 250, spends every draw on nothing.
+
+End to end for a batch of 20 puzzles against 6.1M rows: **1ms** unfiltered,
+**2 to 4ms** by rating and phase, **17ms** with a common theme, **38ms** with
+a rare one. The rare case is the honest worst case, and the next lever for it
+is a `btree_gin` index putting the cell columns inside the themes index.
+
+### The seen set lives in Redis
+
+"A puzzle I have not seen" as `id NOT IN (everything I have solved)` gets
+slower the more somebody solves, which is backwards: the people who use the
+site most would get the worst latency. The set is a Redis set, read once per
+search, and candidates are filtered against it in memory. Postgres keeps the
+durable record in `puzzle_attempts`; losing the Redis key costs a repeated
+puzzle, not history.
+
+### Two modes, and the solution only travels in one
+
+Learning is a drill: filters, hints, an explanation every time, no rating,
+works signed out. Ranked is a test: one puzzle at your level, no filters, no
+hints, rating moves, account required. The mode is stored **on the attempt**
+rather than inferred later, because "did this count" has to be answerable from
+the row.
+
+Learning ships the solution to the browser with the puzzle, which makes solving
+instant and is what Lichess does too. Ranked will not: the solution stays on
+the server and moves are checked one at a time. A rating that moves is worth
+protecting; a drill is not.
+
 ---
 
 ## Bugs that were caught, and how
@@ -199,6 +287,25 @@ wrote a real reaper keyed on `created_at`.
 **A bash 4 feature on a bash 3.2 machine.** `${user^^}` in the e2e script works
 on CI's Ubuntu and fails on macOS. CI would have stayed green while the laptop
 broke.
+
+**An unset filter matched nothing instead of everything.** A nil Go slice
+reaches Postgres as NULL, so `cardinality($1) = 0 OR themes @> $1` evaluated to
+NULL rather than true and every row was dropped. Searching with no theme
+returned an empty list. Caught by a test asking for puzzles with the zero value
+filter, which is the case a person hits first.
+
+**The rare-theme search returned nothing at all.** The sampler drew cells
+weighted by total size, and for a theme covering one puzzle in 250 every draw
+landed in a cell holding none of them. It gave up after twelve scans and
+answered empty. Fixed by counting puzzles per theme per cell, so only cells
+that can answer are ever drawn. Found by a benchmark asserting on the result,
+not just on the timing.
+
+**A placeholder used twice in one comparison lost its type.** Reading a whole
+small cell needed a predicate that always passes, and `$4 = $4` gave Postgres
+nothing to infer from, so it assumed text and pgx refused to send an int into
+it. The fix was to stop being clever and scan from the smallest possible
+cursor.
 
 ---
 
