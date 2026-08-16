@@ -587,3 +587,161 @@ button.wide {
     animation: none !important;
   }
 }
+
+/* ---------- account strip ---------- */
+/* Sits above the masthead rather than inside it: the masthead is a three
+   column grid and a fourth child would push the ledger out of place. */
+.account {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  padding: 0 0 0.7rem;
+  font-size: 0.9rem;
+  color: rgba(233, 220, 190, 0.75);
+}
+
+.account .rating {
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  color: var(--brass-bright);
+  letter-spacing: 0.02em;
+}
+
+/* A provisional rating is one nobody should read too much into yet. */
+.account .prov {
+  font-style: normal;
+  font-size: 0.7em;
+  vertical-align: super;
+  color: rgba(230, 189, 109, 0.6);
+  margin-left: 1px;
+}
+
+.account .whoami {
+  color: rgba(233, 220, 190, 0.6);
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--brass-bright);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(230, 189, 109, 0.35);
+}
+
+.link:hover {
+  border-bottom-color: var(--brass-bright);
+}
+
+.link.quiet {
+  color: rgba(233, 220, 190, 0.6);
+  border-bottom-color: transparent;
+}
+
+.link.quiet:hover {
+  color: var(--parchment);
+  border-bottom-color: rgba(233, 220, 190, 0.4);
+}
+
+/* ---------- auth dialog ---------- */
+.modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 10, 6, 0.72);
+}
+
+.modal {
+  width: min(24rem, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.6rem;
+  border: 1px solid rgba(201, 151, 63, 0.4);
+  border-radius: 4px;
+  background: var(--leather-2);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+.modal h2 {
+  font-family: var(--display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--parchment);
+}
+
+.modal .note {
+  font-size: 0.88rem;
+  color: var(--verdigris);
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(233, 220, 190, 0.6);
+}
+
+.modal input {
+  font-family: var(--serif);
+  font-size: 1rem;
+  padding: 0.5rem 0.6rem;
+  color: var(--parchment);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(201, 151, 63, 0.3);
+  border-radius: 3px;
+}
+
+.modal input:focus {
+  outline: none;
+  border-color: var(--brass);
+}
+
+.form-error {
+  font-size: 0.88rem;
+  color: #e0857f;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 0.2rem;
+}
+
+.modal-actions button[type='submit'] {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  padding: 0.45rem 1.1rem;
+  color: var(--leather);
+  background: var(--brass-bright);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.modal-actions button[type='submit']:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.modal .swap {
+  font-size: 0.85rem;
+  color: rgba(233, 220, 190, 0.55);
+}
+
+@media (max-width: 560px) {
+  .account {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}

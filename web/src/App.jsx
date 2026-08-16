@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import SearchTree from './SearchTree.jsx'
+import Account from './Account.jsx'
 
 const api = {
   async createGame(color) {
@@ -70,6 +71,9 @@ function outcome(state) {
 
 export default function App() {
   const [state, setState] = useState(null)
+  // Bumped when a game reaches a terminal state, which is the only moment the
+  // rating can have moved. Polling the profile on a timer would be busywork.
+  const [ratingKey, setRatingKey] = useState(0)
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
@@ -84,7 +88,17 @@ export default function App() {
   const connect = useCallback((id) => {
     wsRef.current?.close()
     const ws = new WebSocket(wsURL(id))
-    ws.onmessage = (ev) => setState(JSON.parse(ev.data))
+    ws.onmessage = (ev) => {
+      const next = JSON.parse(ev.data)
+      setState((prev) => {
+        if (next.status === 'finished' && prev?.status !== 'finished') {
+          // The rating is written by whichever service archives the game, so
+          // give that write a moment to land before asking for the new number.
+          setTimeout(() => setRatingKey((k) => k + 1), 600)
+        }
+        return next
+      })
+    }
     ws.onerror = () => setError('The connection was lost. Refresh to resume.')
     wsRef.current = ws
   }, [])
@@ -168,6 +182,7 @@ export default function App() {
 
   return (
     <div className="page">
+      <Account refreshKey={ratingKey} />
       <header className="masthead">
         <div className="crest">
           <span className="knight">♞</span>
