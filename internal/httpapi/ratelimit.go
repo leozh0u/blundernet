@@ -58,14 +58,15 @@ func (l Limits) withDefaults() Limits {
 	return l
 }
 
-// limitKey identifies who is being limited. A signed-in user is limited as
-// themselves, so sharing a network with someone does not spend their budget.
-// Anonymous traffic falls back to the address, which is coarse but is all
-// there is.
-// Returns the bucket name and whether the caller was identified, which the
-// refusal metric records separately.
+// limitKey identifies who is being limited, and reports whether that identity
+// was a registered account.
+//
+// Only registered users get a bucket of their own. Guests fall back to the
+// address along with everyone signed out, because a guest account is free to
+// create: giving one its own bucket would let a caller mint a fresh identity
+// whenever the old one ran dry, which is not a rate limit.
 func (s *Server) limitKey(r *http.Request, group string) (string, bool) {
-	if u := UserFrom(r.Context()); u != nil {
+	if u := UserFrom(r.Context()); u != nil && !u.IsGuest {
 		return group + ":user:" + u.ID, true
 	}
 	return group + ":ip:" + s.clientIP(r), false

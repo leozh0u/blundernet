@@ -151,4 +151,34 @@ nowguest=$(curl -sf -b "$gjar" "$BASE/api/auth/me" | json "['user']['guest']")
 echo "   signup kept the rating and history in place"
 rm -f "$gjar"
 
+echo "9. reads do not mint accounts, and guests do not get their own bucket"
+before=$(curl -sf "$BASE/api/status" | json "['games']['total']" 2>/dev/null || echo 0)
+
+# A GET with no cookie must answer without creating anything. Looping over it
+# used to be an unauthenticated way to fill the users table.
+for _ in 1 2 3 4 5; do curl -sf -o /dev/null "$BASE/api/me/profile"; done
+noacct=$(curl -sf -D /tmp/h.txt -o /dev/null "$BASE/api/me/profile"; grep -ci "set-cookie" /tmp/h.txt || true)
+[ "$noacct" = "0" ] || { echo "   a read handed out a session cookie" >&2; exit 1; }
+prov=$(curl -sf "$BASE/api/me/profile" | json "['provisional']")
+[ "$prov" = "True" ] || { echo "   expected a provisional default profile, got $prov" >&2; exit 1; }
+echo "   reads answer without creating an account"
+
+hist=$(curl -sf "$BASE/api/me/games" | json "['games'].__len__()")
+[ "$hist" = "0" ] || { echo "   expected empty history for no identity, got $hist" >&2; exit 1; }
+echo "   history is empty rather than an error"
+
+# Signing up must not leave the guest token usable, or whoever planted that
+# cookie keeps access to the account it became.
+rjar=$(mktemp); rold=$(mktemp)
+curl -sf -c "$rjar" -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
+  -d '{"color":"white"}' > /dev/null
+oldtok=$(grep bn_session "$rjar" | awk '{print $7}')
+ruser="e2e_s$RANDOM$RANDOM"
+curl -sf -b "$rjar" -c "$rjar" -X POST "$BASE/api/auth/signup" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$ruser\",\"password\":\"correct horse battery\"}" > /dev/null
+whoold=$(curl -sf -H "Cookie: bn_session=$oldtok" "$BASE/api/auth/me" | json "['user']")
+[ "$whoold" = "None" ] || { echo "   the pre-signup token still resolves: $whoold" >&2; exit 1; }
+echo "   signup rotated the session and killed the old token"
+rm -f "$rjar" "$rold" /tmp/h.txt
+
 echo "e2e ok"

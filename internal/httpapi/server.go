@@ -169,7 +169,14 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// archive for games ending in checkmate and has no session to ask. A
 	// first-time visitor gets a guest account here rather than a prompt, so
 	// their first game still counts towards a rating.
-	if user, err := s.ensureIdentity(w, r); err == nil && user != nil {
+	user, err := s.ensureIdentity(w, r)
+	if err != nil {
+		// Losing this quietly means the player finishes a game that is never
+		// rated and never appears in their history, with nothing logged.
+		internalError(w, err)
+		return
+	}
+	if user != nil {
 		g.UserID = user.ID
 	}
 	if err := s.games.Create(r.Context(), g); err != nil {

@@ -46,12 +46,15 @@ func main() {
 		fatal("queue", err)
 	}
 
+	users := store.NewUsers(archive.Pool())
+	go store.RunGuestReaper(ctx, users)
+
 	srv := &http.Server{
 		Addr: ":" + envOr("PORT", "8080"),
 		Handler: obs.Middleware(httpapi.New(httpapi.Deps{
 			Games:         games,
 			Archive:       archive,
-			Users:         store.NewUsers(archive.Pool()),
+			Users:         users,
 			Jobs:          jobs,
 			Redis:         rdb,
 			Static:        web.Dist(),

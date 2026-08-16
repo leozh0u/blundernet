@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
 	"time"
 
+	"github.com/leozh0u/blundernet/internal/rating"
 	"github.com/leozh0u/blundernet/internal/store"
 )
 
@@ -206,6 +208,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *store.User, code int) {
+	// Rotate: destroy whatever token the request arrived with before issuing a
+	// new one. A guest token that survives the upgrade still resolves to the
+	// row that is now a credentialed account, so anyone who planted that
+	// cookie keeps access to it.
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		if err := s.sessions.Destroy(r.Context(), c.Value); err != nil {
+			slog.Warn("destroy previous session", "err", err)
+		}
+	}
 	token, err := s.sessions.Create(r.Context(), user.ID)
 	if err != nil {
 		internalError(w, err)
@@ -239,25 +250,30 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
-// requireIdentity guards the progress routes. A guest counts: everything on
-// the site works without signing up, and an account only makes the progress
-// permanent.
-func (s *Server) requireIdentity(w http.ResponseWriter, r *http.Request) *store.User {
+// readIdentity resolves the caller without creating anything. Read routes use
+// this rather than ensureIdentity: minting an account is a side effect, and a
+// GET that has one lets anyone fill the users table by looping over it.
+func (s *Server) readIdentity(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
 	if s.archive == nil || s.users == nil {
 		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
-		return nil
+		return nil, false
 	}
-	user, err := s.ensureIdentity(w, r)
-	if err != nil {
-		internalError(w, err)
-		return nil
-	}
-	return user
+	return UserFrom(r.Context()), true
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
-	user := s.requireIdentity(w, r)
+	user, ok := s.readIdentity(w, r)
+	if !ok {
+		return
+	}
+	// Nobody here yet. Report the starting rating rather than creating an
+	// account to look it up, so the frontend has something to render on a
+	// first visit and a crawler costs nothing.
 	if user == nil {
+		writeJSON(w, http.StatusOK, &store.Profile{
+			IsGuest: true, Rating: rating.DefaultRating,
+			Deviation: rating.DefaultDeviation, Provisional: true,
+		})
 		return
 	}
 	profile, err := s.archive.Profile(r.Context(), user.ID)
@@ -269,8 +285,12 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	user := s.requireIdentity(w, r)
+	user, ok := s.readIdentity(w, r)
+	if !ok {
+		return
+	}
 	if user == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"games": []store.HistoryEntry{}, "next_before": ""})
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
