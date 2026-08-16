@@ -121,7 +121,8 @@ func applyRating(ctx context.Context, tx pgx.Tx, userID string, score float64) e
 
 // Profile is a user's public record.
 type Profile struct {
-	Username   string  `json:"username"`
+	Username   string  `json:"username"` // empty for a guest
+	IsGuest    bool    `json:"guest"`
 	Rating     float64 `json:"rating"`
 	Deviation  float64 `json:"rating_deviation"`
 	RatedGames int     `json:"rated_games"`
@@ -133,15 +134,20 @@ const provisionalUntil = 5
 
 func (a *Archive) Profile(ctx context.Context, userID string) (*Profile, error) {
 	var p Profile
+	// NULL for a guest, who has no username until they sign up.
+	var username *string
 	err := a.pool.QueryRow(ctx, `
-		SELECT username, rating, rating_deviation, rated_games
+		SELECT username, rating, rating_deviation, rated_games, is_guest
 		FROM users WHERE id = $1`, userID).
-		Scan(&p.Username, &p.Rating, &p.Deviation, &p.RatedGames)
+		Scan(&username, &p.Rating, &p.Deviation, &p.RatedGames, &p.IsGuest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if username != nil {
+		p.Username = *username
 	}
 	p.Provisional = p.RatedGames < provisionalUntil
 	return &p, nil
