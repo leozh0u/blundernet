@@ -121,4 +121,34 @@ still=$(curl -sf -b "$jar2" "$BASE/api/me/games" | json "['games'].__len__()")
 echo "   anonymous games stay unattached"
 rm -f "$jar2"
 
+echo "8. a guest can play and rate without signing up, then keep it"
+gjar=$(mktemp)
+
+# No account, no prompt. The first game mints a guest and counts.
+ggid=$(curl -sf -c "$gjar" -b "$gjar" -X POST "$BASE/api/games" \
+  -H 'Content-Type: application/json' -d '{"color":"white"}' | json "['id']")
+curl -sf -b "$gjar" -X POST "$BASE/api/games/$ggid/resign" > /dev/null
+sleep 1
+
+guest=$(curl -sf -b "$gjar" "$BASE/api/auth/me" | json "['user']['guest']")
+[ "$guest" = "True" ] || { echo "   expected a guest identity, got $guest" >&2; exit 1; }
+grating=$(curl -sf -b "$gjar" "$BASE/api/me/profile" | json "['rating']")
+python3 -c "import sys; sys.exit(0 if $grating < 1500 else 1)" \
+  || { echo "   guest game was not rated: $grating" >&2; exit 1; }
+echo "   guest played and got rated to $grating"
+
+# Signing up keeps the rating and the history, because the guest row is the
+# account rather than something to migrate from.
+guser="e2e_g$RANDOM$RANDOM"
+curl -sf -b "$gjar" -c "$gjar" -X POST "$BASE/api/auth/signup" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$guser\",\"password\":\"correct horse battery\"}" > /dev/null
+kept=$(curl -sf -b "$gjar" "$BASE/api/me/profile" | json "['rating']")
+[ "$kept" = "$grating" ] || { echo "   rating lost on signup: $grating -> $kept" >&2; exit 1; }
+khist=$(curl -sf -b "$gjar" "$BASE/api/me/games" | json "['games'].__len__()")
+[ "$khist" = "1" ] || { echo "   history lost on signup, got $khist games" >&2; exit 1; }
+nowguest=$(curl -sf -b "$gjar" "$BASE/api/auth/me" | json "['user']['guest']")
+[ "$nowguest" = "False" ] || { echo "   still a guest after signing up" >&2; exit 1; }
+echo "   signup kept the rating and history in place"
+rm -f "$gjar"
+
 echo "e2e ok"

@@ -165,10 +165,12 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g := game.New(uuid.NewString(), req.Color)
-	// Attached at creation, not at archival. The worker writes the archive
-	// for games that end in checkmate and has no session to ask.
-	if u := UserFrom(r.Context()); u != nil {
-		g.UserID = u.ID
+	// Attached at creation, not at archival, because the worker writes the
+	// archive for games ending in checkmate and has no session to ask. A
+	// first-time visitor gets a guest account here rather than a prompt, so
+	// their first game still counts towards a rating.
+	if user, err := s.ensureIdentity(w, r); err == nil && user != nil {
+		g.UserID = user.ID
 	}
 	if err := s.games.Create(r.Context(), g); err != nil {
 		internalError(w, err)

@@ -116,6 +116,30 @@ func (c credentials) validate() string {
 	return ""
 }
 
+// ensureIdentity returns the caller's user, creating a guest account if they
+// have none. Anything that stores progress calls this, so a first-time visitor
+// gets a rating and a game history without being asked to sign up. The row is
+// a real user row, so signing up later fills in credentials rather than
+// migrating anything.
+func (s *Server) ensureIdentity(w http.ResponseWriter, r *http.Request) (*store.User, error) {
+	if u := UserFrom(r.Context()); u != nil {
+		return u, nil
+	}
+	if s.users == nil {
+		return nil, nil // accounts disabled; play stays anonymous and unsaved
+	}
+	guest, err := s.users.CreateGuest(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	token, err := s.sessions.Create(r.Context(), guest.ID)
+	if err != nil {
+		return nil, err
+	}
+	s.setSessionCookie(w, token, s.sessionTTL)
+	return guest, nil
+}
+
 func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	if s.users == nil {
 		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
@@ -131,7 +155,20 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.users.Create(r.Context(), creds.Username, creds.Password)
+	// Signing up while playing as a guest upgrades that account in place, so
+	// the games and rating already earned carry over. Falling back to a fresh
+	// account covers the guest row having been reaped in between.
+	var user *store.User
+	var err error
+	if current := UserFrom(r.Context()); current != nil && current.IsGuest {
+		user, err = s.users.Upgrade(r.Context(), current.ID, creds.Username, creds.Password)
+		if errors.Is(err, store.ErrNotGuest) {
+			httpError(w, http.StatusConflict, "that session already has an account")
+			return
+		}
+	} else {
+		user, err = s.users.Create(r.Context(), creds.Username, creds.Password)
+	}
 	if errors.Is(err, store.ErrUsernameTaken) {
 		httpError(w, http.StatusConflict, "that username is taken")
 		return
@@ -197,27 +234,29 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"user": nil})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"user": map[string]string{"id": user.ID, "username": user.Username},
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"user": map[string]any{
+		"id": user.ID, "username": user.Username, "guest": user.IsGuest,
+	}})
 }
 
-// requireUser is the guard for routes that have no anonymous meaning.
-func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) *store.User {
-	user := UserFrom(r.Context())
-	if user == nil {
-		httpError(w, http.StatusUnauthorized, "sign in first")
+// requireIdentity guards the progress routes. A guest counts: everything on
+// the site works without signing up, and an account only makes the progress
+// permanent.
+func (s *Server) requireIdentity(w http.ResponseWriter, r *http.Request) *store.User {
+	if s.archive == nil || s.users == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
 		return nil
 	}
-	if s.archive == nil {
-		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+	user, err := s.ensureIdentity(w, r)
+	if err != nil {
+		internalError(w, err)
 		return nil
 	}
 	return user
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
-	user := s.requireUser(w, r)
+	user := s.requireIdentity(w, r)
 	if user == nil {
 		return
 	}
@@ -230,7 +269,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	user := s.requireUser(w, r)
+	user := s.requireIdentity(w, r)
 	if user == nil {
 		return
 	}

@@ -19,11 +19,13 @@ import (
 var (
 	ErrUsernameTaken  = errors.New("username taken")
 	ErrBadCredentials = errors.New("bad credentials")
+	ErrNotGuest       = errors.New("not a guest account")
 )
 
 type User struct {
 	ID       string
-	Username string
+	Username string // empty for a guest
+	IsGuest  bool
 }
 
 type Users struct {
@@ -89,6 +91,44 @@ func verifyPassword(password, encoded string) bool {
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
+// CreateGuest makes a credential-less account. Play, puzzles and ratings all
+// work against it; the only thing missing is a way to sign back in.
+func (u *Users) CreateGuest(ctx context.Context) (*User, error) {
+	id := uuid.NewString()
+	_, err := u.pool.Exec(ctx,
+		"INSERT INTO users (id, is_guest) VALUES ($1, true)", id)
+	if err != nil {
+		return nil, err
+	}
+	return &User{ID: id, IsGuest: true}, nil
+}
+
+// Upgrade turns a guest into a real account in place. Nothing moves: the games
+// and the rating already point at this row, so filling in the credentials is
+// the whole operation.
+func (u *Users) Upgrade(ctx context.Context, userID, username, password string) (*User, error) {
+	hash, err := hashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+	tag, err := u.pool.Exec(ctx, `
+		UPDATE users SET username = $2, password_hash = $3, is_guest = false
+		WHERE id = $1 AND is_guest`, userID, username, hash)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrUsernameTaken
+		}
+		return nil, err
+	}
+	// Already upgraded, by a second tab or a replayed request. Not an error,
+	// but this call did not do it, so the caller should not claim it did.
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotGuest
+	}
+	return &User{ID: userID, Username: username}, nil
+}
+
 func (u *Users) Create(ctx context.Context, username, password string) (*User, error) {
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -115,8 +155,9 @@ func (u *Users) Create(ctx context.Context, username, password string) (*User, e
 // password, so the response cannot be used to enumerate which usernames exist.
 func (u *Users) Authenticate(ctx context.Context, username, password string) (*User, error) {
 	var id, name, hash string
-	err := u.pool.QueryRow(ctx,
-		"SELECT id, username, password_hash FROM users WHERE lower(username) = lower($1)",
+	err := u.pool.QueryRow(ctx, `
+		SELECT id, username, password_hash FROM users
+		WHERE lower(username) = lower($1) AND NOT is_guest`,
 		username).Scan(&id, &name, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Hash anyway. Returning early on an unknown username would make the
@@ -136,13 +177,19 @@ func (u *Users) Authenticate(ctx context.Context, username, password string) (*U
 
 func (u *Users) ByID(ctx context.Context, id string) (*User, error) {
 	var user User
+	var name *string
 	err := u.pool.QueryRow(ctx,
-		"SELECT id, username FROM users WHERE id = $1", id).Scan(&user.ID, &user.Username)
+		"SELECT id, username, is_guest FROM users WHERE id = $1", id).
+		Scan(&user.ID, &name, &user.IsGuest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	// NULL for a guest, who has no username yet.
+	if name != nil {
+		user.Username = *name
 	}
 	return &user, nil
 }
