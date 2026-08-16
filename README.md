@@ -4,7 +4,9 @@
 
 Play chess against [the BlunderNet engine](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch, at a site built to hold up when many people play at once.
 
-The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? The answer here is a Go service fleet behind a load balancer, with game state in Redis, engine inference decoupled onto queue-fed workers, finished games archived in Postgres, and the whole thing defined in Terraform.
+The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? Stateless Go API instances with game state in Redis, engine inference decoupled onto queue-fed workers, finished games archived in Postgres, and the whole thing defined in Terraform.
+
+Live at **https://blundernet.com**. That runs a single instance of each service on one box, which is what the site needs and what it costs about ten dollars a month to keep up. The Terraform in `deploy/terraform` is the multi-instance version behind a load balancer, which has been deployed and exercised but is not what is currently serving.
 
 **Stack:** Go, React, PostgreSQL, Redis, SQS, ONNX Runtime, Docker, Terraform, AWS (ALB, ECS Fargate, ElastiCache, RDS)
 
@@ -143,7 +145,7 @@ The repo ships two stacks, because the architecture worth designing and the arch
 
 `deploy/terraform` is the reference design: an autoscaling api fleet behind an ALB, workers scaled on queue depth, ElastiCache, RDS. It is what the system should look like under load, it has been deployed and exercised end to end, and it costs roughly $60 a month to leave running. So it goes up on demand and comes down after.
 
-`deploy/demo` is the version cheap enough to leave running: one t4g.micro with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $10 a month. Same code, same queue semantics, a tenth of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. Both stacks are torn down between demos, so there is no public URL to click right now; `make demo-deploy` prints one in a couple of minutes.
+`deploy/demo` is the version cheap enough to leave running: one t4g.micro with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $10 a month. Same code, same queue semantics, a tenth of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. `deploy/demo` is what serves blundernet.com today.
 
 ```
 make demo-deploy    # build arm64 images, push, stand up the box
