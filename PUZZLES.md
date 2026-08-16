@@ -26,6 +26,60 @@ That is the product. Not a puzzle generator, a **puzzle search engine**. The
 LeetCode comparison is right: LeetCode did not invent the problems, it made
 them filterable, rated, and trackable.
 
+## Two modes
+
+They are different products sharing a corpus, and keeping them apart is what
+stops either from being watered down.
+
+### Learning
+
+A drill. Everything customizable: filter by length, difficulty, phase and
+theme, then work through as many as you want. Hints available. An explanation
+after every one, right or wrong. A "another like this" button that carries the
+puzzle's own tags straight back into the filter, so a fork you just failed
+becomes twenty more forks.
+
+**No rating, and no account needed.** Nothing here is a measurement, so there
+is nothing to protect and nothing to lose by letting anyone in. This is the
+part a recruiter clicking the link can use immediately.
+
+### Ranked
+
+A test. One puzzle at your level, no filters, no hints, no second try. Rating
+moves on every attempt, both yours and the puzzle's. Same shape as chess.com
+and Lichess rated puzzles, because that format works and does not need
+reinventing.
+
+**Account required.** This is the first thing on the site that genuinely needs
+one, which makes it the honest place to ask. Everything else stays free and
+signed out, so the ask lands as "keep your rating" rather than a wall.
+
+The mode is stored on each attempt rather than inferred, because "did this
+count towards my rating" has to be answerable from the row. Learning attempts
+never touch a rating, on either side.
+
+## Hints, explanations, and the next one
+
+**Hints, progressively.** Which piece moves, then which square, then the move
+itself. Each one is recorded on the attempt, because solving cold and solving
+after three hints are different things and the drill list should know.
+
+**Explanations, derived rather than written.** Every puzzle arrives tagged, and
+the position after the solution is inspectable, so the explanation is
+assembled: which enemy pieces the moved piece now attacks, what was hanging,
+whether it was mate. "The knight lands on f7 attacking the king and the rook"
+falls out of the board, not out of a model.
+
+Deliberately **not** an LLM. Asking one to explain chess is asking it to be
+confidently wrong next to a solution that is provably right, which is worse
+than saying less. The tags and the position are enough for the common cases,
+and the honest fallback for the rest is the theme name and the evaluation
+swing.
+
+**"Another like this"** needs no similarity model. Take the current puzzle's
+theme, length and rating band, and feed them back in as the filter. It is the
+search that already exists, seeded from where you are standing.
+
 ## Architecture
 
 Two halves, same split as the engine: batch work offline, serving online.
@@ -111,12 +165,17 @@ way to drill only those.
 
 ## Order of work
 
-1. Schema and ingest. Get 6M real puzzles queryable locally.
+1. Schema and ingest. Get 6M real puzzles queryable locally. Schema is done,
+   migrations 0006 and 0007.
 2. The selection query, with the seen set, measured under load.
-3. Solve/fail API and the Glicko-2 update on both sides.
-4. UI: board, filter panel, streak, the wrong-ones list.
-5. My own generator, on the existing worker pattern.
-6. The difficulty model, once there are generated puzzles that need one.
+3. Learning mode first: filters, solve/fail, no rating. It works signed out,
+   so it is testable without touching accounts.
+4. Hints and derived explanations.
+5. "Another like this", which is the filter seeded from the current puzzle.
+6. Ranked mode: account gate, Glicko-2 on both sides, no hints.
+7. The wrong-ones drill list.
+8. My own generator, on the existing worker pattern.
+9. The difficulty model, once there are generated puzzles that need one.
 
 ## Attribution
 
