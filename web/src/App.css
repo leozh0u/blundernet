@@ -6,23 +6,24 @@
    No gradients, no glow, no decorative shapes. Depth comes from type scale
    and spacing. */
 :root {
-  --bg: #f6f5f2;
-  --surface: #ffffff;
-  --surface-sunk: #efedE8;
-  --line: #e2ded6;
-  --line-strong: #cfc9be;
+  --bg: #262421;
+  --surface: #302e2b;
+  --surface-sunk: #272522;
+  --line: #3d3a36;
+  --line-strong: #4a4642;
 
-  --ink: #262421;
-  --ink-soft: #5c574f;
-  --ink-faint: #8a847a;
+  --ink: #f1f1f0;
+  --ink-soft: #b8b5b0;
+  --ink-faint: #8b8781;
 
   /* The one accent. Reserved for primary actions and the live-turn marker,
      so its presence always means the same thing. */
-  --green: #5d8a3f;
-  --green-deep: #4a7132;
-  --green-wash: #edf3e7;
+  --green: #81b64c;
+  --green-deep: #6b9a3c;
+  --green-shadow: #4a7132;
+  --green-wash: rgba(129, 182, 76, 0.14);
 
-  --danger: #a33a30;
+  --danger: #e0796f;
 
   /* Board squares, the standard pairing. */
   --sq-light: #eeeed2;
@@ -31,7 +32,7 @@
   --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --radius: 6px;
+  --radius: 8px;
 }
 
 * {
@@ -96,7 +97,7 @@ button {
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--green-deep);
+  color: var(--green);
   font-weight: 500;
   cursor: pointer;
 }
@@ -129,8 +130,8 @@ button {
   width: 2.25rem;
   height: 2.25rem;
   border-radius: var(--radius);
-  background: var(--ink);
-  color: var(--bg);
+  background: var(--green);
+  color: #14200a;
 }
 
 .crest .knight {
@@ -182,13 +183,20 @@ button {
 
 /* ---------- lobby ---------- */
 .lobby {
-  padding: 2.5rem 0;
+  padding: 3rem 0 2rem;
   text-align: center;
 }
 
+.lobby h2 {
+  font-size: clamp(1.9rem, 5vw, 2.9rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
 .lobby p {
-  max-width: 34rem;
-  margin: 0 auto 1.75rem;
+  max-width: 32rem;
+  margin: 0.75rem auto 2rem;
   color: var(--ink-soft);
 }
 
@@ -199,33 +207,59 @@ button {
   flex-wrap: wrap;
 }
 
+/* Buttons sit on a shadow that shortens when pressed, so a click feels like
+   the button actually went down. It is the one bit of ornament worth having:
+   it reports state rather than decorating. */
 .choice {
-  min-width: 11rem;
-  padding: 0.85rem 1.5rem;
-  border: 1px solid var(--line-strong);
+  min-width: 12rem;
+  padding: 0.9rem 1.6rem;
+  border: none;
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink);
-  font-size: 1rem;
+  font-size: 1.05rem;
   cursor: pointer;
   text-align: center;
+  box-shadow: 0 4px 0 var(--line-strong);
+  transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.15s ease;
 }
 
 .choice:hover {
-  border-color: var(--green);
+  background: #3a3733;
 }
 
-/* Playing white is the common case, so it gets the accent and the other
-   does not. Two primary buttons is no primary button. */
+.choice:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--line-strong);
+}
+
+/* Playing white is the common case, so it gets the accent and the other does
+   not. Two primary buttons is no primary button. */
 .choice.light {
   background: var(--green);
-  border-color: var(--green);
-  color: #fff;
-  font-weight: 500;
+  color: #14200a;
+  font-weight: 600;
+  box-shadow: 0 4px 0 var(--green-shadow);
 }
 
 .choice.light:hover {
-  background: var(--green-deep);
+  background: #8cc253;
+}
+
+.choice.light:active {
+  box-shadow: 0 1px 0 var(--green-shadow);
+}
+
+.choice .seal {
+  display: block;
+  font-size: 1.6rem;
+  line-height: 1;
+  margin-bottom: 0.2rem;
+}
+
+.choice .label {
+  display: block;
+  font-weight: 600;
 }
 
 .choice .sub {
@@ -236,7 +270,7 @@ button {
 }
 
 .choice.light .sub {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(20, 32, 10, 0.65);
 }
 
 /* ---------- game ---------- */
@@ -275,6 +309,19 @@ button {
   border-radius: var(--radius);
   background: var(--surface);
   text-align: center;
+  animation: land 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Scale and fade, no bounce. A result is information, not a party trick. */
+@keyframes land {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+.verdict.win h2 {
+  color: var(--green);
 }
 
 .verdict .wax {
@@ -323,7 +370,7 @@ button {
 
 .state.yours {
   background: var(--green-wash);
-  color: var(--green-deep);
+  color: var(--green);
 }
 
 .state .hint {
@@ -333,8 +380,8 @@ button {
 }
 
 .state.yours .hint {
-  color: var(--green-deep);
-  opacity: 0.75;
+  color: var(--green);
+  opacity: 0.7;
 }
 
 .record {
@@ -407,8 +454,8 @@ button {
 .again button {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
-  font-weight: 500;
+  color: #14200a;
+  font-weight: 600;
 }
 
 .again button:hover {
@@ -460,7 +507,7 @@ button {
 
 .modal .note {
   font-size: 0.85rem;
-  color: var(--green-deep);
+  color: var(--green);
   background: var(--green-wash);
   padding: 0.5rem 0.65rem;
   border-radius: var(--radius);
@@ -479,7 +526,7 @@ button {
   font-size: 0.95rem;
   padding: 0.5rem 0.6rem;
   color: var(--ink);
-  background: var(--surface);
+  background: var(--surface-sunk);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
 }
@@ -505,9 +552,9 @@ button {
 
 .modal-actions button[type='submit'] {
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
   padding: 0.5rem 1.1rem;
-  color: #fff;
+  color: #14200a;
   background: var(--green);
   border: 1px solid var(--green);
   border-radius: var(--radius);
@@ -554,7 +601,7 @@ button {
   margin-top: 1rem;
   padding: 0.6rem 0.85rem;
   border-radius: var(--radius);
-  background: #fbecea;
+  background: rgba(224, 121, 111, 0.12);
   color: var(--danger);
   font-size: 0.9rem;
 }
@@ -570,5 +617,12 @@ button {
     width: 100%;
     justify-content: flex-start;
     text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
