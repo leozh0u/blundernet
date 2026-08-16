@@ -48,6 +48,7 @@ func main() {
 
 	users := store.NewUsers(archive.Pool())
 	go store.RunGuestReaper(ctx, users)
+	puzzles := store.NewPuzzles(archive.Pool())
 
 	srv := &http.Server{
 		Addr: ":" + envOr("PORT", "8080"),
@@ -55,6 +56,7 @@ func main() {
 			Games:         games,
 			Archive:       archive,
 			Users:         users,
+			Puzzles:       puzzles,
 			Jobs:          jobs,
 			Redis:         rdb,
 			Static:        web.Dist(),
@@ -67,6 +69,7 @@ func main() {
 				Auth:       limitFromEnv("RATE_LIMIT_AUTH"),
 				CreateGame: limitFromEnv("RATE_LIMIT_CREATE"),
 				Move:       limitFromEnv("RATE_LIMIT_MOVE"),
+				Puzzles:    limitFromEnv("RATE_LIMIT_PUZZLES"),
 			},
 		})),
 		ReadHeaderTimeout: 5 * time.Second,

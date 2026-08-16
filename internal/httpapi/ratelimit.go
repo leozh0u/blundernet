@@ -24,6 +24,7 @@ type Limits struct {
 	Auth       store.Limit
 	CreateGame store.Limit
 	Move       store.Limit
+	Puzzles    store.Limit
 }
 
 // DefaultLimits are the production values.
@@ -40,6 +41,11 @@ func DefaultLimits() Limits {
 		// Moves in a game already under way. Loose enough that a fast blitz
 		// player never notices it.
 		Move: store.Limit{Burst: 60, Rate: 2},
+
+		// A puzzle search is a handful of indexed scans, and a drill session
+		// asks for a new batch every ten or twenty puzzles. Loose, but not so
+		// loose that somebody can page the whole corpus out of the database.
+		Puzzles: store.Limit{Burst: 30, Rate: 1},
 	}
 }
 
@@ -54,6 +60,9 @@ func (l Limits) withDefaults() Limits {
 	}
 	if l.Move == (store.Limit{}) {
 		l.Move = d.Move
+	}
+	if l.Puzzles == (store.Limit{}) {
+		l.Puzzles = d.Puzzles
 	}
 	return l
 }

@@ -36,6 +36,7 @@ type Deps struct {
 	Games    *store.Games
 	Archive  *store.Archive // nil disables the archive and stats
 	Users    *store.Users   // nil disables accounts; the site still plays
+	Puzzles  *store.Puzzles // nil disables puzzles; the rest of the site works
 	Sessions *store.Sessions
 	Jobs     Enqueuer
 	Redis    *redis.Client
@@ -60,6 +61,8 @@ type Server struct {
 	games         *store.Games
 	archive       *store.Archive
 	users         *store.Users
+	puzzles       *store.Puzzles
+	seen          *store.Seen
 	sessions      *store.Sessions
 	jobs          Enqueuer
 	rdb           *redis.Client
@@ -80,13 +83,15 @@ func New(d Deps) *Server {
 		d.Sessions = store.NewSessions(d.Redis, d.SessionTTL)
 	}
 	s := &Server{
-		games: d.Games, archive: d.Archive, users: d.Users, sessions: d.Sessions,
-		jobs: d.Jobs, rdb: d.Redis, static: d.Static,
+		games: d.Games, archive: d.Archive, users: d.Users, puzzles: d.Puzzles,
+		sessions: d.Sessions,
+		jobs:     d.Jobs, rdb: d.Redis, static: d.Static,
 		secureCookies: d.SecureCookies, trustProxy: d.TrustProxy,
 		sessionTTL: d.SessionTTL, limits: d.Limits.withDefaults(),
 	}
 	if d.Redis != nil {
 		s.limiter = store.NewLimiter(d.Redis)
+		s.seen = store.NewSeen(d.Redis)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -100,6 +105,10 @@ func New(d Deps) *Server {
 	mux.HandleFunc("POST /api/games/{id}/moves", s.limit("move", s.limits.Move, s.handleMove))
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
+	mux.HandleFunc("GET /api/puzzles", s.limit("puzzles", s.limits.Puzzles, s.handlePuzzleSearch))
+	mux.HandleFunc("GET /api/puzzles/themes", s.handlePuzzleThemes)
+	mux.HandleFunc("GET /api/puzzles/{id}", s.handlePuzzleByID)
+	mux.HandleFunc("POST /api/puzzles/{id}/attempt", s.limit("attempt", s.limits.Move, s.handlePuzzleAttempt))
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/me/profile", s.handleProfile)
 	mux.HandleFunc("GET /api/me/games", s.handleHistory)

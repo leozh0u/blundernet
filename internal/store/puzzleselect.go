@@ -179,6 +179,37 @@ func (p *Puzzles) cells(ctx context.Context, f Filter) ([]cell, int64, error) {
 	return out, total, rows.Err()
 }
 
+// Theme is one filter option with the size of the set behind it.
+type Theme struct {
+	Name string `json:"name"`
+	N    int64  `json:"n"`
+}
+
+// Themes lists every theme in the corpus, largest first. It reads the same
+// summary the sampler weights cells with, so the menu cannot offer a filter
+// that returns nothing.
+func (p *Puzzles) Themes(ctx context.Context) ([]Theme, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT theme, sum(n) FROM puzzle_cells
+		WHERE theme <> ''
+		GROUP BY theme
+		ORDER BY sum(n) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []Theme{}
+	for rows.Next() {
+		var t Theme
+		if err := rows.Scan(&t.Name, &t.N); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // notNull turns a nil slice into an empty array. A nil slice reaches Postgres
 // as NULL, and every comparison against NULL is NULL rather than false, so an
 // unset filter would silently match nothing instead of everything.

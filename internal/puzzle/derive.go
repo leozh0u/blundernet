@@ -104,6 +104,39 @@ func Parse(rec []string) (Puzzle, error) {
 // solver, so a five ply solution is three moves.
 func (p Puzzle) UserMoves() int { return (p.SolutionPlies + 1) / 2 }
 
+// SetupMove is the opponent's blunder, played automatically before the solver
+// is asked anything.
+func (p Puzzle) SetupMove() string {
+	if len(p.Moves) == 0 {
+		return ""
+	}
+	return p.Moves[0]
+}
+
+// Solution is everything after the blunder: the solver's moves and the
+// opponent's replies, alternating, ending on the solver.
+func (p Puzzle) Solution() []string {
+	if len(p.Moves) < 2 {
+		return nil
+	}
+	return p.Moves[1:]
+}
+
+// SolverColor is the side the player takes. The FEN is the position before the
+// blunder, so the side to move there is the opponent and the solver is the
+// other one.
+func (p Puzzle) SolverColor() string {
+	fields := strings.Fields(p.FEN)
+	if len(fields) >= 2 && fields[1] == "w" {
+		return "black"
+	}
+	return "white"
+}
+
+// PliesFor turns a length in solver moves into the ply count stored on the
+// row. Solutions always end on the solver, so they are always odd.
+func PliesFor(moves int) int { return moves*2 - 1 }
+
 // normalizeTags splits a space separated tag list, drops duplicates and sorts
 // it. Sorting is for stable output rather than for the index: a GIN index on
 // an array does not care about order, but a diff of two loads does.
