@@ -190,27 +190,25 @@ export default function App() {
         <div className="titles">
           <h1>BlunderNet</h1>
           <p className="rule">
-            <span>Est. MMXXVI</span>
-            <i />
-            <span>A thinking machine, honestly built</span>
+            <span>Play a neural network</span>
           </p>
         </div>
         {stats && stats.total > 0 && (
           <dl className="ledger">
             <div>
-              <dt>Bouts</dt>
+              <dt>Games</dt>
               <dd>{stats.total}</dd>
             </div>
             <div>
-              <dt>Machine</dt>
+              <dt>Engine</dt>
               <dd>{stats.engine_wins}</dd>
             </div>
             <div>
-              <dt>Mortals</dt>
+              <dt>Players</dt>
               <dd>{stats.player_wins}</dd>
             </div>
             <div>
-              <dt>Drawn</dt>
+              <dt>Draws</dt>
               <dd>{stats.draws}</dd>
             </div>
           </dl>
@@ -219,26 +217,27 @@ export default function App() {
 
       {!state ? (
         <section className="lobby">
-          <h2>Take a seat</h2>
+          <h2>Play the engine</h2>
           <p>
-            In 1770 a cabinet toured Europe playing chess, and a man was hidden
-            inside it. This one has a neural network instead: trained from
-            nothing, and searching a tree of its own making for every reply.
+            A neural network trained on games from strong Lichess players,
+            picking each reply by searching a few hundred positions ahead. It
+            plays around 1000 Elo, so it is beatable. Your rating is tracked
+            whether or not you make an account.
           </p>
           <div className="choices">
-            <button className="choice" onClick={() => newGame('white')}>
+            <button className="choice light" onClick={() => newGame('white')}>
               <span className="seal light">♔</span>
               <span className="label">Play White</span>
               <span className="sub">Yours is the first move</span>
             </button>
-            <button className="choice" onClick={() => newGame('black')}>
+            <button className="choice dark" onClick={() => newGame('black')}>
               <span className="seal dark">♚</span>
               <span className="label">Play Black</span>
               <span className="sub">The machine opens</span>
             </button>
           </div>
           <p className="fineprint">
-            300 simulations per move · policy and value network · ~450k parameters
+            300 simulations per move · policy and value heads · 2.6M parameters
           </p>
         </section>
       ) : (
@@ -251,9 +250,9 @@ export default function App() {
                 onSquareClick={onSquareClick}
                 boardOrientation={state.player_color}
                 arePiecesDraggable={state.status === 'ongoing'}
-                customBoardStyle={{ borderRadius: '2px' }}
-                customDarkSquareStyle={{ backgroundColor: '#a9793f' }}
-                customLightSquareStyle={{ backgroundColor: '#eddcb6' }}
+                customBoardStyle={{ borderRadius: '6px' }}
+                customDarkSquareStyle={{ backgroundColor: '#769656' }}
+                customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
                 customSquareStyles={squareStyles}
               />
               {result && (
@@ -322,9 +321,11 @@ export default function App() {
       {error && <div className="error">{error}</div>}
 
       <footer className="foot">
-        <a href="https://github.com/leozh0u/blundernet">The workings</a>
-        <i />
+        <a href="https://github.com/leozh0u/blundernet">Source</a>
+        <span aria-hidden="true"> · </span>
         <a href="https://github.com/leozh0u/blundernet-engine">The engine</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/status">Status</a>
       </footer>
     </div>
   )
