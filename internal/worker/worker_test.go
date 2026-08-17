@@ -227,3 +227,31 @@ func TestReviewFindsTheWorstMove(t *testing.T) {
 
 // colorFor names the side to move, which the game model wants explicitly.
 func colorFor(g *game.Game, _ string) string { return g.Turn() }
+
+// A learning game adapts: the same position is played at a different strength
+// depending on who is winning. A rated game never does.
+func TestLevelForAdaptsOnlyInLearningGames(t *testing.T) {
+	w, _, _ := setup(t)
+	w.Engine = engine.NewMaterial() // has a Scorer, and its numbers are checkable
+
+	learning := game.New("a1", "white", 3, false)
+	rated := game.New("a2", "white", 3, true)
+	friend := game.New("a3", "white", 3, false)
+	friend.Friend = true
+
+	// White threw the queen away and Black took it with the king. Black is the
+	// bot here and it is Black's move, which is the only time this is asked.
+	for _, g := range []*game.Game{learning, rated, friend} {
+		g.Moves = []string{"e2e4", "e7e5", "d1h5", "b8c6", "h5f7", "e8f7", "g1f3"}
+		g.Ply = len(g.Moves)
+	}
+	if got := w.levelFor(learning); got >= 3 {
+		t.Errorf("a learning bot that is winning played level %d, want lower than 3", got)
+	}
+	if got := w.levelFor(rated); got != 3 {
+		t.Errorf("a rated game adapted to level %d, want the ladder's 3", got)
+	}
+	if got := w.levelFor(friend); got != 3 {
+		t.Errorf("a friend game adapted to level %d, want 3", got)
+	}
+}

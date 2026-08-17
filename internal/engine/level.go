@@ -65,3 +65,38 @@ type Scorer interface {
 	// perspective, in [-1, 1].
 	Score(fen string) (float64, error)
 }
+
+// Adapt nudges a level towards a close game.
+//
+// value is the position from the bot's own side, in [-1, 1]. Two rungs is the
+// most it will move, so a level one bot cannot turn into a level five one
+// because it fell behind: the player picked a level and that is still roughly
+// the game they are getting.
+//
+// The thresholds are wide on purpose. A value head reading 0.2 means very
+// little from a model this size, and reacting to it would make the bot
+// twitchy, playing a different strength every move for no reason a player
+// could follow.
+const adaptSwing = 2
+
+func Adapt(base int, value float64) int {
+	step := 0
+	switch {
+	case value > 0.6:
+		step = -adaptSwing
+	case value > 0.3:
+		step = -1
+	case value < -0.6:
+		step = adaptSwing
+	case value < -0.3:
+		step = 1
+	}
+	level := base + step
+	if level < MinLevel {
+		level = MinLevel
+	}
+	if level > MaxLevel {
+		level = MaxLevel
+	}
+	return level
+}

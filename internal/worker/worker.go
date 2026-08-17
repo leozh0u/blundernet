@@ -93,10 +93,38 @@ func (w *Worker) hintMove(g *game.Game) (string, error) {
 // strength when it cannot. The material fallback has one setting, and the
 // stack has to keep working without the model.
 func (w *Worker) bestMove(g *game.Game) (string, error) {
-	if leveled, ok := w.Engine.(engine.Leveled); ok && g.Level > 0 {
-		return leveled.BestMoveAt(g.FEN(), g.Level)
+	leveled, ok := w.Engine.(engine.Leveled)
+	if !ok || g.Level <= 0 {
+		return w.Engine.BestMove(g.FEN())
 	}
-	return w.Engine.BestMove(g.FEN())
+	return leveled.BestMoveAt(g.FEN(), w.levelFor(g))
+}
+
+// levelFor is the strength to play this move at.
+//
+// In a learning game the bot aims for a close game rather than for a result:
+// well ahead it eases off, well behind it bears down. Losing 40 to 0 teaches
+// nobody anything, and neither does winning that way.
+//
+// It never happens in a rated game or against a friend. A rating measures a
+// player against a fixed opponent, and an opponent that gets easier the moment
+// you fall behind is not fixed; it would hand out the rating rather than
+// measure it.
+func (w *Worker) levelFor(g *game.Game) int {
+	if g.Rated || g.Friend {
+		return g.Level
+	}
+	scorer, ok := w.Engine.(engine.Scorer)
+	if !ok {
+		return g.Level
+	}
+	// It is the bot's turn, so the value head already answers from its side.
+	value, err := scorer.Score(g.FEN())
+	if err != nil {
+		slog.Warn("score for adaptation", "game", g.ID, "err", err)
+		return g.Level
+	}
+	return engine.Adapt(g.Level, value)
 }
 
 func (w *Worker) Process(ctx context.Context, j queue.Job) error {

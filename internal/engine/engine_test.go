@@ -135,3 +135,28 @@ func TestONNXPlaysLegalMoves(t *testing.T) {
 		}
 	}
 }
+
+// The bot eases off when it is winning and bears down when it is losing, and
+// never by more than two rungs: the player picked a level and should still be
+// getting roughly that game.
+func TestAdaptMovesTowardsACloseGame(t *testing.T) {
+	cases := []struct {
+		name  string
+		base  int
+		value float64
+		want  int
+	}{
+		{"level game", 3, 0.05, 3},
+		{"slightly ahead", 3, 0.4, 2},
+		{"well ahead", 3, 0.9, 1},
+		{"slightly behind", 3, -0.4, 4},
+		{"well behind", 3, -0.9, 5},
+		{"cannot go below the floor", 1, 0.9, 1},
+		{"cannot go above the ceiling", 6, -0.9, 6},
+	}
+	for _, c := range cases {
+		if got := Adapt(c.base, c.value); got != c.want {
+			t.Errorf("%s: Adapt(%d, %v) = %d, want %d", c.name, c.base, c.value, got, c.want)
+		}
+	}
+}
