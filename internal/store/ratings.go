@@ -190,6 +190,7 @@ type Profile struct {
 	PuzzleDeviation float64 `json:"puzzle_rating_deviation"`
 	PuzzlesSolved   int     `json:"puzzles_solved"`
 	PuzzlesTried    int     `json:"puzzles_tried"`
+	BestStreak      int     `json:"best_streak"`
 	Favourites      int     `json:"favourites"`
 	ToReview        int     `json:"to_review"`
 	// Provisional until there are enough games for the rating to mean much.
@@ -208,6 +209,7 @@ func (a *Archive) Profile(ctx context.Context, userID string) (*Profile, error) 
 	err := a.pool.QueryRow(ctx, `
 		SELECT u.username, u.rating, u.rating_deviation, u.rated_games, u.is_guest,
 		       u.bot_level, u.puzzle_rating, u.puzzle_rating_deviation, u.puzzles_solved,
+		       u.best_streak,
 		       (SELECT count(DISTINCT puzzle_id) FROM puzzle_attempts a
 		         WHERE a.user_id = u.id),
 		       (SELECT count(*) FROM puzzle_favourites f WHERE f.user_id = u.id),
@@ -220,6 +222,7 @@ func (a *Archive) Profile(ctx context.Context, userID string) (*Profile, error) 
 		FROM users u WHERE u.id = $1`, userID).
 		Scan(&username, &p.Rating, &p.Deviation, &p.RatedGames, &p.IsGuest,
 			&p.BotLevel, &p.PuzzleRating, &p.PuzzleDeviation, &p.PuzzlesSolved,
+			&p.BestStreak,
 			&p.PuzzlesTried, &p.Favourites, &p.ToReview)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

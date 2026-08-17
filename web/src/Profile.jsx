@@ -91,6 +91,10 @@ export default function Profile({ onDrill }) {
               <dt>Seen</dt>
               <dd>{profile?.puzzles_tried ?? 0}</dd>
             </div>
+            <div>
+              <dt>Best streak</dt>
+              <dd>{profile?.best_streak ?? 0}</dd>
+            </div>
           </dl>
           <p className="explains">
             A separate rating, because tactics and playing are different

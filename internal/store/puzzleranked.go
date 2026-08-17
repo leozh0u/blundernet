@@ -130,6 +130,9 @@ func (p *Puzzles) RecordRanked(ctx context.Context, userID, puzzleID string, sol
 	newUser := rating.Update(user, []rating.Result{{
 		OpponentRating: puz.Rating, OpponentDeviation: puz.Deviation, Score: score,
 	}})
+	if !solved {
+		newUser.Rating = user.Rating - missPenalty(user.Rating, user.Rating-newUser.Rating)
+	}
 	newPuz := rating.Update(puz, []rating.Result{{
 		OpponentRating: user.Rating, OpponentDeviation: user.Deviation, Score: 1 - score,
 	}})
@@ -173,6 +176,46 @@ func (p *Puzzles) RecordRanked(ctx context.Context, userID, puzzleID string, sol
 		out.Solved++
 	}
 	return out, nil
+}
+
+// A miss costs more than Glicko alone would charge, and more the higher the
+// rating is.
+//
+// This is a deliberate departure from the model and worth being able to
+// defend. Glicko is symmetric by design: it is estimating a strength, and a
+// strength estimate should not care whether you are happy about it. But a
+// ranked puzzle is one move with no second try, and a rating that barely moves
+// on a miss makes guessing the best strategy. Charging more for a miss makes
+// the cheap guess expensive, which is the behaviour the mode is for.
+//
+// The multiplier is 1 at 1200 and rises to 2.5 by 2400. A miss at 2200 should
+// hurt: at that rating the puzzle served was one somebody at 2200 is expected
+// to solve, and missing it is more information than missing one at 900.
+const (
+	penaltyFloorRating = 1200
+	penaltyPerPoint    = 1.0 / 800
+	penaltyMax         = 2.5
+	ratingFloor        = 400
+)
+
+func missPenalty(current, drop float64) float64 {
+	multiplier := 1.0
+	if current > penaltyFloorRating {
+		multiplier += (current - penaltyFloorRating) * penaltyPerPoint
+	}
+	if multiplier > penaltyMax {
+		multiplier = penaltyMax
+	}
+	charged := drop * multiplier
+	// Never below the floor: a rating that can reach zero stops being a scale
+	// and starts being a punishment.
+	if current-charged < ratingFloor {
+		charged = current - ratingFloor
+	}
+	if charged < 0 {
+		charged = 0
+	}
+	return charged
 }
 
 // PuzzleRating is the user's tactical rating, kept apart from the playing

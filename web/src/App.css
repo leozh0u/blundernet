@@ -1248,6 +1248,29 @@ button {
   opacity: 0.85;
 }
 
+/* The move verdict. Green and red mean the same here as everywhere else, so
+   they are the two colours on the site that are not the accent. */
+.board-overlay .badge circle {
+  stroke: rgba(16, 28, 40, 0.35);
+  stroke-width: 0.03;
+}
+
+.board-overlay .badge path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.07;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.board-overlay .badge.good circle {
+  fill: #5aa552;
+}
+
+.board-overlay .badge.bad circle {
+  fill: #c0463c;
+}
+
 @keyframes hintpulse {
   0%,
   100% {
@@ -1290,4 +1313,64 @@ button {
 .worst .loss {
   font-family: var(--mono);
   color: var(--danger);
+}
+
+/* The invite. A link you can read, select and copy, because the thing being
+   asked for is a paste into a message somewhere else. */
+.invite {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.invite label {
+  font-size: 0.95rem;
+  color: var(--ink-faint);
+}
+
+.invite input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+}
+
+.invite button {
+  width: 100%;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--blue);
+  border-radius: var(--radius);
+  background: var(--blue);
+  color: #0d1926;
+  font-size: 0.97rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.invite button:hover {
+  background: var(--blue-deep);
+}
+
+/* The mark. Blue tile, dark piece, and a floor line so the rook is falling
+   rather than floating. */
+.logo {
+  display: block;
+  flex: none;
+}
+
+.logo-bg {
+  fill: var(--blue);
+}
+
+.logo-piece {
+  fill: #0d1926;
+}
+
+.logo-floor {
+  fill: #0d1926;
+  opacity: 0.35;
 }

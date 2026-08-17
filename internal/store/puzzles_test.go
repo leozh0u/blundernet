@@ -295,3 +295,27 @@ func contains(hay []string, needle string) bool {
 	}
 	return false
 }
+
+// A miss costs more than Glicko alone charges, and the higher the rating the
+// more it costs. Ranked has no second try, so a cheap miss makes guessing the
+// best strategy.
+func TestMissPenaltyGrowsWithRating(t *testing.T) {
+	base := 20.0
+	low := missPenalty(1000, base)
+	mid := missPenalty(1600, base)
+	high := missPenalty(2400, base)
+
+	if low != base {
+		t.Errorf("below the floor a miss should cost the plain amount, got %v", low)
+	}
+	if !(mid > low && high > mid) {
+		t.Errorf("penalty did not grow: %v then %v then %v", low, mid, high)
+	}
+	if high > base*2.5+0.001 {
+		t.Errorf("penalty %v exceeded the cap", high)
+	}
+	// It cannot dig below the floor, whatever the multiplier says.
+	if got := missPenalty(420, 100); got != 20 {
+		t.Errorf("penalty at the floor = %v, want 20", got)
+	}
+}

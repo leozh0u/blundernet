@@ -110,6 +110,7 @@ export default function Puzzles({ shared }) {
   // out of date.
   const hintsUsed = useRef(0)
   const [saved, setSaved] = useState(false)
+  const [verdict, setVerdict] = useState(null)
   const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
@@ -163,6 +164,7 @@ export default function Puzzles({ shared }) {
       setStep(0)
       setSelected(null)
       setHintLevel(0)
+      setVerdict(null)
       hintsUsed.current = 0
       setSaved(!!p.saved)
       setPhase('setup')
@@ -356,6 +358,7 @@ export default function Puzzles({ shared }) {
     // Exact match, or any move that is mate. A second mate in one is still a
     // solved puzzle, and refusing it would be the site being wrong.
     const right = uciOf(mv) === want || probe.isCheckmate()
+    setVerdict({ square: to, good: right })
     if (!right) {
       setBoard(probe)
       setPhase('failed')
@@ -375,6 +378,7 @@ export default function Puzzles({ shared }) {
   // place and only differ in what gets recorded.
   const playSolutionMove = () => {
     const want = puzzle.solution[step]
+    later(() => setVerdict(null), 900)
     const played = new Chess(board.fen())
     played.move({
       from: want.slice(0, 2),
@@ -648,6 +652,7 @@ export default function Puzzles({ shared }) {
                 orientation={puzzle?.color || 'white'}
                 glow={hint?.glow}
                 arrow={hint?.arrow}
+                badge={verdict}
               />
             </div>
           </div>

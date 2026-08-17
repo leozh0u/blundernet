@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
+import BoardOverlay from './BoardOverlay.jsx'
 
 // Streak. Puzzles get harder until you miss one, and then the run is over.
 // No hints, no second try, no rating: the only thing kept is the best run.
@@ -17,6 +18,7 @@ export default function Streak() {
   const [count, setCount] = useState(0)
   const [best, setBest] = useState(0)
   const [selected, setSelected] = useState(null)
+  const [verdict, setVerdict] = useState(null)
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
@@ -75,6 +77,7 @@ export default function Streak() {
       return
     }
     const body = await res.json()
+    setVerdict({ square: uci.slice(2, 4), good: body.correct })
     setCount(body.count)
 
     if (body.correct && !body.done) {
@@ -200,6 +203,7 @@ export default function Streak() {
             customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
             customSquareStyles={squareStyles}
           />
+          <BoardOverlay orientation={puzzle?.color || 'white'} badge={verdict} />
         </div>
       </div>
 

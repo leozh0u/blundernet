@@ -8,6 +8,7 @@ import Ranked from './Ranked.jsx'
 import Profile from './Profile.jsx'
 import Streak from './Streak.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
+import Logo from './Logo.jsx'
 
 const api = {
   async createGame(color, mode, level) {
@@ -152,6 +153,8 @@ export default function App() {
   const [mode, setMode] = useState('rated')
   const [level, setLevel] = useState(3)
   const [ladder, setLadder] = useState(null)
+  const [recent, setRecent] = useState([])
+  const [mine, setMine] = useState(null)
   const [hint, setHint] = useState(null)
   const [review, setReview] = useState(null)
   const [reviewing, setReviewing] = useState(false)
@@ -163,7 +166,15 @@ export default function App() {
   useEffect(() => {
     api.stats().then(setStats).catch(() => {})
     api.profile()
-      .then((p) => p && setLadder(p.bot_level))
+      .then((p) => {
+        if (!p) return
+        setLadder(p.bot_level)
+        setMine(p)
+      })
+      .catch(() => {})
+    fetch('/api/me/games?limit=5')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((g) => setRecent(Array.isArray(g) ? g : g?.games || []))
       .catch(() => {})
   }, [state?.status])
 
@@ -317,6 +328,22 @@ export default function App() {
     return styles
   }, [selected, legalTargets, state, hint])
 
+  // The invite is a link somebody has to paste into a message, so it is shown
+  // as text they can select, with a button for the common case. Telling them
+  // to "share this page" and leaving the URL in the address bar is not a
+  // feature, it is a shrug.
+  const inviteURL = state?.friend ? `${window.location.origin}/play/${state.id}` : ''
+  const [invited, setInvited] = useState(false)
+  const copyInvite = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteURL)
+      setInvited(true)
+      setTimeout(() => setInvited(false), 1600)
+    } catch {
+      window.prompt('Copy this link', inviteURL)
+    }
+  }
+
   const askForReview = async () => {
     setReviewing(true)
     setReview(await api.review(state.id))
@@ -330,7 +357,7 @@ export default function App() {
     <div className="page">
       <header className="bar">
         <button className="brand" onClick={() => go('puzzles')}>
-          <span className="crest">♞</span>
+          <Logo size={30} />
           <span className="word">BlunderNet</span>
         </button>
         <nav className="nav">
@@ -428,7 +455,7 @@ export default function App() {
           <div className="levels">
             {mode === 'friend' ? (
               <span className="ladder">
-                Pick a side <i>then send them the link</i>
+                Pick a side <i>you get a link to send</i>
               </span>
             ) : mode === 'learning' ? (
               <>
@@ -464,6 +491,45 @@ export default function App() {
               <span className="label">Black</span>
             </button>
           </div>
+          <div className="cards">
+            <div className="card">
+              <h2>You</h2>
+              <dl className="meta">
+                <div>
+                  <dt>Rating</dt>
+                  <dd>{mine ? Math.round(mine.rating) : '...'}</dd>
+                </div>
+                <div>
+                  <dt>Bot level</dt>
+                  <dd>{ladder || 3}</dd>
+                </div>
+                <div>
+                  <dt>Rated games</dt>
+                  <dd>{mine ? mine.rated_games : '...'}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="card">
+              <h2>Last games</h2>
+              {recent.length === 0 ? (
+                <p className="explains">Nothing finished yet.</p>
+              ) : (
+                <table className="history">
+                  <tbody>
+                    {recent.map((g) => (
+                      <tr key={g.id}>
+                        <td>{g.player_color === 'white' ? 'White' : 'Black'}</td>
+                        <td>{outcome({ ...g, status: 'finished' })?.title || ''}</td>
+                        <td className="num">{g.ply} plies</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
           {stats && stats.total > 0 && (
             <dl className="ledger">
               <div>
@@ -526,10 +592,7 @@ export default function App() {
           <aside className="panel">
             <div className={`state ${myTurn ? 'yours' : 'machine'}`}>
               {state.waiting ? (
-                <>
-                  <span className="head">Waiting for your friend</span>
-                  <span className="hint">Send them this page's link.</span>
-                </>
+                <span className="head">Waiting for your friend</span>
               ) : state.status === 'finished' ? (
                 <span className="head">The game is done</span>
               ) : myTurn ? (
@@ -594,6 +657,16 @@ export default function App() {
                 </ol>
               )}
             </div>
+
+            {state.waiting && (
+              <div className="invite">
+                <label htmlFor="invite">Send them this link</label>
+                <input id="invite" readOnly value={inviteURL} onFocus={(e) => e.target.select()} />
+                <button className="wide" onClick={copyInvite}>
+                  {invited ? 'Copied' : 'Copy link'}
+                </button>
+              </div>
+            )}
 
             {state.status === 'ongoing' && (
               <div className="during">

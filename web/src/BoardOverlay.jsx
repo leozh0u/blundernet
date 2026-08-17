@@ -4,7 +4,7 @@
 //
 // The viewBox is 8 by 8, one unit per square, so nothing here has to know the
 // board's pixel size. It scales with whatever the board is rendered at.
-export default function BoardOverlay({ orientation = 'white', glow, arrow }) {
+export default function BoardOverlay({ orientation = 'white', glow, arrow, badge }) {
   const centre = (square) => {
     const file = square.charCodeAt(0) - 97
     const rank = Number(square[1])
@@ -31,7 +31,7 @@ export default function BoardOverlay({ orientation = 'white', glow, arrow }) {
     }
   }
 
-  if (!glow && !line) return null
+  if (!glow && !line && !badge) return null
 
   return (
     <svg className="board-overlay" viewBox="0 0 8 8" aria-hidden="true">
@@ -69,6 +69,22 @@ export default function BoardOverlay({ orientation = 'white', glow, arrow }) {
           y2={line.y2}
           markerEnd="url(#hint-arrowhead)"
         />
+      )}
+
+      {/* Right or wrong, said on the square it happened on. Everyone who has
+          played chess online reads this without being told what it means. */}
+      {badge && (
+        <g
+          className={`badge ${badge.good ? 'good' : 'bad'}`}
+          transform={`translate(${centre(badge.square).x + 0.3} ${centre(badge.square).y - 0.3})`}
+        >
+          <circle r="0.26" />
+          {badge.good ? (
+            <path d="M-0.12 0 L-0.03 0.1 L0.13 -0.1" />
+          ) : (
+            <path d="M-0.1 -0.1 L0.1 0.1 M0.1 -0.1 L-0.1 0.1" />
+          )}
+        </g>
       )}
     </svg>
   )

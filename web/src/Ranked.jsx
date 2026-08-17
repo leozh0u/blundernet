@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
+import BoardOverlay from './BoardOverlay.jsx'
 
 // Ranked mode. One puzzle at your level, no filters, no hints, no second try,
 // and the rating moves both ways.
@@ -21,6 +22,7 @@ export default function Ranked() {
   const [phase, setPhase] = useState('loading') // loading, locked, setup, solving, done, empty
   const [result, setResult] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [verdict, setVerdict] = useState(null)
   const [me, setMe] = useState(null)
   const [error, setError] = useState('')
   const startedAt = useRef(0)
@@ -46,6 +48,7 @@ export default function Ranked() {
       setPuzzle(p)
       setResult(null)
       setSelected(null)
+      setVerdict(null)
       setPhase('setup')
       setBoard(new Chess(p.fen))
       later(() => {
@@ -134,6 +137,7 @@ export default function Ranked() {
       return
     }
     const body = await res.json()
+    setVerdict({ square: uci.slice(2, 4), good: body.correct })
 
     if (body.correct && !body.done) {
       // The reply is forced, so it is played rather than announced.
@@ -252,6 +256,7 @@ export default function Ranked() {
             customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
             customSquareStyles={squareStyles}
           />
+          <BoardOverlay orientation={puzzle?.color || 'white'} badge={verdict} />
         </div>
       </div>
 
