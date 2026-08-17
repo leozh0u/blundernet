@@ -312,6 +312,53 @@ browser gets it on the WebSocket it already has open.
 Hints are refused on rated games. A hint on a rated game is somebody else's
 move on your rating.
 
+### Streak, and what a mode is for
+
+Three puzzle modes now, and each one exists because it answers a different
+question. Learning asks "what do I want to practise", so it has every filter
+and no score. Ranked asks "how good am I", so it has no filters, no hints, and
+a rating that moves. Streak asks "how long can I keep it up", so puzzles climb
+by forty rating points a solve and one miss ends the run. Only the best run is
+kept: a streak is a game rather than a measurement, so it does not touch a
+rating.
+
+Streak lets guests play, which ranked does not. The difference is what is
+being protected. A rating on a throwaway account measures nothing, so ranked
+refuses one; a streak is its own reward and there is nothing to farm.
+
+### Reviewing a game with a model that is not very good
+
+The post-game review scores every position with the value head and no search,
+then reports what each of your moves cost. The first version compared the
+position before your move with the position immediately after it, which called
+hanging a queen a *gain*: the capture that punishes it has not happened yet
+and a value head with no search cannot see it coming. It compares against the
+position after the opponent has answered instead, which is when a blunder
+shows up.
+
+That still leaves the bigger problem, and it is worth being straight about it:
+the model is rated around 1000, and its opinion is worth about that much. It
+scored the position after Qxf7+ Kxf7 as good for White. So the review carries
+**two** signals, the network's view and the material on the board, and flags a
+move when either says so. Material is not a matter of opinion, so a queen that
+went for nothing is caught whatever the value head believes. The weighting
+between them (a pawn is worth a third of a value point) is the one judgement
+call in the file, and it is written down as one.
+
+### Two humans on one game
+
+A friend game is the same Redis game with a second seat. `ColorFor(userID)`
+answers which side a request may move: the creator has the colour they chose,
+the second person to open the link has the other, and anybody after that is
+watching. Nothing about it is rated, because a second seat you can fill from
+another tab is a rating anybody could farm.
+
+The one thing that had to change on the wire is that `player_color` names the
+side of whoever *made* the game, so it cannot tell the second player which end
+of the board they are on. Responses to a request now carry `you`; the
+broadcasts do not, because a broadcast goes to both people and cannot be
+addressed to either. The browser keeps what it was told when it joined.
+
 ---
 
 ## Bugs that were caught, and how
@@ -375,6 +422,20 @@ landed in a cell holding none of them. It gave up after twelve scans and
 answered empty. Fixed by counting puzzles per theme per cell, so only cells
 that can answer are ever drawn. Found by a benchmark asserting on the result,
 not just on the timing.
+
+**A "first render" flag that React spent twice.** Opening a shared puzzle link
+loaded the puzzle and then immediately replaced it with a random one. The
+effect that reloads when you switch drill lists was guarded by a flag meant to
+skip the first run, and React runs mount effects twice in development, so the
+flag was spent on the first pass and the second pass ran a search over the top
+of the shared puzzle. The guard compares the value now rather than counting
+renders.
+
+**A hint that fired and did nothing.** The hint button worked and the board
+never changed, because the code lighting up squares still read `hint.from`
+after the field had been renamed to `hint.squares` in an unrelated pass. It
+printed one line of text in the corner and looked broken. Hints are drawn on
+an SVG over the board now, which is also how they got to point at things.
 
 **A placeholder used twice in one comparison lost its type.** Reading a whole
 small cell needed a predicate that always passes, and `$4 = $4` gave Postgres

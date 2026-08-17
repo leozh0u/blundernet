@@ -396,7 +396,7 @@ export default function App() {
       ) : !state ? (
         <section className="lobby">
           <div className="pagehead">
-            <h1>Play the bot</h1>
+            <h1>{mode === 'friend' ? 'Play a friend' : 'Play the bot'}</h1>
           </div>
           <div className="modes" role="tablist">
             <button
