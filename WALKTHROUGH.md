@@ -233,9 +233,40 @@ rather than inferred later, because "did this count" has to be answerable from
 the row.
 
 Learning ships the solution to the browser with the puzzle, which makes solving
-instant and is what Lichess does too. Ranked will not: the solution stays on
-the server and moves are checked one at a time. A rating that moves is worth
-protecting; a drill is not.
+instant and is what Lichess does too. Ranked does not: the solution stays on
+the server and moves are posted one at a time to be graded. A rating that moves
+is worth protecting; a drill is not.
+
+Two more things fall out of ranked keeping a rating:
+
+**One puzzle in progress, held server side.** If a new puzzle arrived on every
+request, an unwanted one could be reloaded away until an easy one turned up,
+and the rating would measure patience rather than tactics. The attempt lives in
+Redis for two hours, and asking again returns the same puzzle.
+
+**Guests are refused, and they are the only thing on the site that is.** A
+guest account is minted for free by playing a game, so a rating attached to one
+measures nothing. Learning mode stays open to everybody, which is what makes
+the ask land as "keep your rating" rather than as a wall.
+
+Both ratings move on a ranked attempt, in one transaction, with the user row
+locked before the puzzle row so two people solving the same puzzle at once
+queue instead of deadlocking. Both updates read the ratings as they were before
+the attempt: feeding the new user rating into the puzzle's update would give
+the second side a different opponent than the first. Imported puzzles arrive
+with a Lichess rating and a small deviation, so they barely move, which is
+correct. A new player's deviation is 350, so their first result moves a lot,
+which is also correct and looks alarming the first time you see it: solving one
+1626 puzzle took a fresh account from 1500 to 1759.
+
+**Explanations are derived, not written.** `internal/puzzle/explain.go` replays
+the line, then reports what the board says: whether it is mate, what the moved
+piece now attacks, and what material the line won. Pawns are left out of the
+attack list, because a rook hitting the king and a pawn is not a fork and
+listing every pawn in range turns a sentence into a dump of the board. When
+nothing is quotable it falls back to the theme name in a sentence. Checked
+against 25 real puzzles at a time: every one produced something true, and a row
+whose moves do not replay produces nothing at all rather than a guess.
 
 ---
 
