@@ -443,6 +443,14 @@ answered empty. Fixed by counting puzzles per theme per cell, so only cells
 that can answer are ever drawn. Found by a benchmark asserting on the result,
 not just on the timing.
 
+**The importer that ran fine on a laptop and ground for 25 minutes on the
+box.** The cell summary aggregates 13 million unnested theme rows. Postgres
+defaults `work_mem` to 4MB, so on the deploy box that sort spilled to disk and
+took 25 minutes, while the same default on a laptop finished in seconds
+because everything fitted in page cache. The refresh sets its own `work_mem`
+now. The lesson worth keeping: "it is fast on my machine" was a statement
+about memory, not about the query.
+
 **A "first render" flag that React spent twice.** Opening a shared puzzle link
 loaded the puzzle and then immediately replaced it with a random one. The
 effect that reloads when you switch drill lists was guarded by a flag meant to
