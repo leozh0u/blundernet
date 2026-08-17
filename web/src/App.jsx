@@ -126,6 +126,13 @@ export default function App() {
   const go = (to) => {
     window.history.pushState({}, '', PATHS[to])
     setRoute(to)
+    // Clicking Play while a game is on screen means "take me back to the
+    // menu". Without this the nav looks broken: the path changes and the
+    // board stays, with no way back except a reload.
+    if (to === 'play') {
+      setState(null)
+      setHint(null)
+    }
   }
 
   const connect = useCallback((id) => {

@@ -268,6 +268,50 @@ nothing is quotable it falls back to the theme name in a sentence. Checked
 against 25 real puzzles at a time: every one produced something true, and a row
 whose moves do not replay produces nothing at all rather than a guess.
 
+### The bot is a ladder, and weakness is sampled rather than truncated
+
+One model, six levels. Cutting the search alone makes the bot shallower but it
+still plays the best move it can see, which reads as a small engine rather than
+as a weaker player. So each level carries a temperature as well: the root move
+is drawn from visits^(1/T) instead of taken as the maximum. Level 6 is the
+maximum and plays the search's answer; level 1 looks at eight simulations and
+picks something close to at random among the moves it looked at. It is weak
+without ever playing a move the search never considered.
+
+The level moves one rung after every rated game, win or lose. That is a
+separate number from the Glicko rating on purpose: the rating answers "how
+strong is this player" and moves slowly by design, and the ladder answers "what
+should the next opponent be", which has to be current exactly when somebody is
+improving fastest.
+
+**Rating a variable opponent honestly.** The engine has no Glicko state, so
+each level needs a number to be rated against. Only one of them is measured:
+level 5 is the 300-simulation configuration the engine repo evaluates against
+Stockfish, and 1000 is that estimate. The rest are an assumption of 120 points
+a rung. Rather than hide that, the deviation says it: 50 for the measured
+level, 150 for the assumed ones, so a result against a level nobody has
+calibrated moves the player's rating less. Glicko-2 already knows how to
+handle an uncertain opponent; this is telling it the truth.
+
+**Learning games are not rated**, and the flag lives on the game row rather
+than being inferred, for the same reason the puzzle attempt carries its mode.
+
+### Hints go through the queue, not the request
+
+A hint is "what should I play here", which is the same search as an engine
+move and takes about as long. Answering it inside the HTTP request would put
+inference back on the request path, which is the thing the queue exists to
+prevent.
+
+So a hint is a job with `Kind: "hint"`. The worker runs the search at full
+strength, publishes `{"type":"hint","uci":...}` to the game's channel, and
+never touches the game. That last part is what makes duplicate delivery
+harmless here: a hint arriving twice, or late, cannot move a piece. The
+browser gets it on the WebSocket it already has open.
+
+Hints are refused on rated games. A hint on a rated game is somebody else's
+move on your rating.
+
 ---
 
 ## Bugs that were caught, and how
