@@ -32,7 +32,9 @@ func newPuzzleServer(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(archive.Close)
-	if _, err := archive.Pool().Exec(ctx, "TRUNCATE puzzles CASCADE"); err != nil {
+	// Users go too: ranked mode signs one up, and a leftover row from the last
+	// run makes the second run fail on a taken username.
+	if _, err := archive.Pool().Exec(ctx, "TRUNCATE puzzles, users CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	puzzles := store.NewPuzzles(archive.Pool())
@@ -217,5 +219,145 @@ func TestPuzzleThemes(t *testing.T) {
 	}
 	if counts["fork"] != 10 || counts["pin"] != 30 {
 		t.Errorf("theme counts = %v, want fork 10 and pin 30", counts)
+	}
+}
+
+// signUp returns the cookies for a fresh account, which is what ranked mode
+// requires and guests do not get.
+func signUp(t *testing.T, s *Server, name string) []*http.Cookie {
+	t.Helper()
+	rec := do(t, s, "POST", "/api/auth/signup",
+		`{"username":"`+name+`","password":"correct horse battery"}`)
+	if rec.Code != http.StatusCreated && rec.Code != http.StatusOK {
+		t.Fatalf("signup: %d %s", rec.Code, rec.Body)
+	}
+	return rec.Result().Cookies()
+}
+
+func asUser(s *Server, cookies []*http.Cookie, method, path, body string) *httptest.ResponseRecorder {
+	req := newRequest(method, path, body)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	return serve(s, req)
+}
+
+func TestRankedNeedsAnAccount(t *testing.T) {
+	s := newPuzzleServer(t)
+	rec := do(t, s, "GET", "/api/puzzles/ranked", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("signed out: %d %s", rec.Code, rec.Body)
+	}
+	// A guest is minted by playing a learning puzzle, and still cannot play
+	// ranked: an account you can mint for free is not an account.
+	attempt := do(t, s, "POST", "/api/puzzles/fork01/attempt", `{"solved":true}`)
+	rec = asUser(s, attempt.Result().Cookies(), "GET", "/api/puzzles/ranked", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("guest: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestRankedServesOnePuzzleAndKeepsIt(t *testing.T) {
+	s := newPuzzleServer(t)
+	cookies := signUp(t, s, "ranked_keeps")
+
+	rec := asUser(s, cookies, "GET", "/api/puzzles/ranked", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ranked: %d %s", rec.Code, rec.Body)
+	}
+	var first rankedView
+	if err := json.Unmarshal(rec.Body.Bytes(), &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.ID == "" || first.SetupMove == "" {
+		t.Fatalf("got %+v", first)
+	}
+	// The solution must not be in the payload at all. This is the whole
+	// difference between the two modes.
+	if bytes := rec.Body.String(); strings.Contains(bytes, "solution") {
+		t.Errorf("ranked payload carries a solution: %s", bytes)
+	}
+
+	// Asking again returns the same puzzle, so an unwanted one cannot be
+	// reloaded away.
+	rec = asUser(s, cookies, "GET", "/api/puzzles/ranked", "")
+	var again rankedView
+	if err := json.Unmarshal(rec.Body.Bytes(), &again); err != nil {
+		t.Fatal(err)
+	}
+	if again.ID != first.ID {
+		t.Errorf("reloading changed the puzzle: %s then %s", first.ID, again.ID)
+	}
+}
+
+func TestRankedWrongMoveEndsTheAttemptAndMovesTheRating(t *testing.T) {
+	s := newPuzzleServer(t)
+	cookies := signUp(t, s, "ranked_wrong")
+	asUser(s, cookies, "GET", "/api/puzzles/ranked", "")
+
+	rec := asUser(s, cookies, "POST", "/api/puzzles/ranked/move", `{"uci":"a2a3","ms":5000}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("move: %d %s", rec.Code, rec.Body)
+	}
+	var res rankedMoveResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Correct || !res.Done {
+		t.Errorf("a wrong move should end the attempt: %+v", res)
+	}
+	if len(res.Solution) == 0 {
+		t.Error("the solution should be revealed once the attempt is over")
+	}
+	if res.Rating == nil || res.Rating.Change >= 0 {
+		t.Errorf("a failed puzzle should cost rating, got %+v", res.Rating)
+	}
+	// The attempt is over, so a second move has nothing to grade.
+	rec = asUser(s, cookies, "POST", "/api/puzzles/ranked/move", `{"uci":"a2a3"}`)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("second move: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestRankedSolvingRaisesTheRating(t *testing.T) {
+	s := newPuzzleServer(t)
+	cookies := signUp(t, s, "ranked_right")
+	asUser(s, cookies, "GET", "/api/puzzles/ranked", "")
+
+	// Every fixture puzzle is the same line: the solver plays e6e7, the
+	// opponent answers b2b1, and b3c1 finishes it.
+	rec := asUser(s, cookies, "POST", "/api/puzzles/ranked/move", `{"uci":"e6e7"}`)
+	var step rankedMoveResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &step); err != nil {
+		t.Fatal(err)
+	}
+	if !step.Correct || step.Done || step.Reply != "b2b1" {
+		t.Fatalf("first move: %+v", step)
+	}
+
+	rec = asUser(s, cookies, "POST", "/api/puzzles/ranked/move", `{"uci":"b3c1","ms":9000}`)
+	var last rankedMoveResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &last); err != nil {
+		t.Fatal(err)
+	}
+	if !last.Correct || !last.Done {
+		t.Fatalf("last move: %+v", last)
+	}
+	if last.Rating == nil || last.Rating.Change <= 0 {
+		t.Errorf("solving should gain rating, got %+v", last.Rating)
+	}
+	if last.Rating.Solved != 1 {
+		t.Errorf("solved count = %d, want 1", last.Rating.Solved)
+	}
+
+	// The next request draws a different puzzle, because the solved one is
+	// now in the seen set.
+	rec = asUser(s, cookies, "GET", "/api/puzzles/ranked", "")
+	var next rankedView
+	if err := json.Unmarshal(rec.Body.Bytes(), &next); err != nil {
+		t.Fatal(err)
+	}
+	if next.ID == "" {
+		t.Fatal("no puzzle after finishing one")
 	}
 }

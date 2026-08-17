@@ -87,3 +87,48 @@ func TestExplainRefusesABrokenRow(t *testing.T) {
 		t.Error("a move that does not play should produce no explanation at all")
 	}
 }
+
+func TestCheckGradesRankedMoves(t *testing.T) {
+	// Black blunders with d7c6, white forks on f7, the rook takes, and white
+	// plays a second move. Three solution plies, so step 2 is the last one.
+	p, err := Parse([]string{
+		"chk1", "3q1r1k/pppb1ppp/8/4N3/8/8/PPPP1PPP/R1BQ1RK1 b - - 0 1",
+		"d7c6 e5f7 f8f7 d1e2", "1500", "75", "95", "500",
+		"fork middlegame short", "", "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, done := Check(p, 0, "e5f7"); !ok || done {
+		t.Errorf("the solution move should be correct and not finish: ok=%v done=%v", ok, done)
+	}
+	if ok, _ := Check(p, 0, "e5g6"); ok {
+		t.Error("a different knight move should be wrong")
+	}
+	if ok, _ := Check(p, 0, "e5e6"); ok {
+		t.Error("an illegal move should be wrong rather than accepted")
+	}
+	if ok, done := Check(p, 2, "d1e2"); !ok || !done {
+		t.Errorf("the last move should finish the puzzle: ok=%v done=%v", ok, done)
+	}
+	if ok, _ := Check(p, 9, "d1e2"); ok {
+		t.Error("a step past the end of the solution should be refused")
+	}
+}
+
+func TestCheckAcceptsADifferentMate(t *testing.T) {
+	// Two mates in one are available: the recorded Ra8 and the equally final
+	// Rb8. A puzzle claiming one answer must still accept the other.
+	p, err := Parse([]string{
+		"chk2", "6k1/p4ppp/8/8/8/8/8/RR5K b - - 0 1",
+		"a7a6 a1a8", "1200", "75", "95", "500",
+		"mate mateIn1 endgame", "", "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, done := Check(p, 0, "b1b8"); !ok || !done {
+		t.Errorf("a different mate in one should be accepted: ok=%v done=%v", ok, done)
+	}
+}

@@ -343,3 +343,51 @@ func displayThemes(themes []string) []string {
 	}
 	return out
 }
+
+// Check grades one move in ranked mode, where the browser never sees the
+// solution and every move comes back here to be judged.
+//
+// step is how many plies of the solution have already been played. The move is
+// accepted when it is the solution move, or when it is a different move that
+// is immediate checkmate: a second mate is still a solved puzzle, and refusing
+// it would be the site being wrong rather than the player.
+func Check(p Puzzle, step int, uci string) (correct, finished bool) {
+	solution := p.Solution()
+	if step < 0 || step >= len(solution) {
+		return false, false
+	}
+	pos, err := positionAfter(p, step)
+	if err != nil {
+		return false, false
+	}
+	mv := findMove(pos, uci)
+	if mv == nil {
+		return false, false // not even legal here
+	}
+	if !strings.EqualFold(uci, solution[step]) && pos.Update(mv).Status() != chess.Checkmate {
+		return false, false
+	}
+	// The line ends on the solver, so a correct move at the last step finishes
+	// the puzzle. Mate found early finishes it too: there is nothing left to
+	// punish.
+	done := step == len(solution)-1 || pos.Update(mv).Status() == chess.Checkmate
+	return true, done
+}
+
+// positionAfter returns the position the solver faces after the opponent's
+// blunder and the first step plies of the solution.
+func positionAfter(p Puzzle, step int) (*chess.Position, error) {
+	fen, err := chess.FEN(p.FEN)
+	if err != nil {
+		return nil, err
+	}
+	pos := chess.NewGame(fen).Position()
+	for i := 0; i <= step; i++ {
+		mv := findMove(pos, p.Moves[i])
+		if mv == nil {
+			return nil, fmt.Errorf("puzzle %s: move %s does not play", p.ID, p.Moves[i])
+		}
+		pos = pos.Update(mv)
+	}
+	return pos, nil
+}
