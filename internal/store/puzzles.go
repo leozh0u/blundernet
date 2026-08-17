@@ -149,6 +149,15 @@ func (p *Puzzles) RefreshCells(ctx context.Context) error {
 	}
 	defer tx.Rollback(context.WithoutCancel(ctx))
 
+	// The summary is three grouped aggregates over the whole corpus, one of
+	// them across 13 million unnested theme rows. Postgres defaults work_mem
+	// to 4MB, which makes that sort spill to disk: on the deploy box it turned
+	// a refresh that takes seconds on a laptop into a twenty minute grind.
+	// This is the one statement in the codebase that deserves its own memory
+	// budget, and it runs a few times a year.
+	if _, err := tx.Exec(ctx, "SET LOCAL work_mem = '96MB'"); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, "DELETE FROM puzzle_cells"); err != nil {
 		return err
 	}

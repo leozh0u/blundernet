@@ -296,6 +296,26 @@ handle an uncertain opponent; this is telling it the truth.
 **Learning games are not rated**, and the flag lives on the game row rather
 than being inferred, for the same reason the puzzle attempt carries its mode.
 
+### The bot aims for a close game, but only when nothing is being measured
+
+In a learning game the bot picks its strength per move from the position it is
+looking at: well ahead it drops up to two rungs, well behind it climbs up to
+two. Losing forty to nothing teaches nobody anything, and winning that way
+teaches them less.
+
+Two limits keep it honest. It never moves more than two rungs from the level
+the player chose, so a level one bot cannot become a level five one by falling
+behind. And it never happens in a rated game or against a friend: a rating
+measures a player against a fixed opponent, and an opponent that eases off the
+moment you struggle is not fixed. That would hand out the rating rather than
+measure it.
+
+The signal is the value head with no search, which is the same evaluation the
+review uses and is weak for the same reasons. That is tolerable here in a way
+it is not there: getting the direction right is enough to keep a game close,
+and the thresholds are wide (0.3 and 0.6) so a model that is unsure does not
+make the bot twitch between strengths every move.
+
 ### Hints go through the queue, not the request
 
 A hint is "what should I play here", which is the same search as an engine
