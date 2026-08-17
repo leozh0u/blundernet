@@ -65,6 +65,7 @@ type Server struct {
 	puzzles       *store.Puzzles
 	seen          *store.Seen
 	ranked        *store.Ranked
+	streak        *store.Streak
 	sessions      *store.Sessions
 	jobs          Enqueuer
 	rdb           *redis.Client
@@ -95,6 +96,7 @@ func New(d Deps) *Server {
 		s.limiter = store.NewLimiter(d.Redis)
 		s.seen = store.NewSeen(d.Redis)
 		s.ranked = store.NewRanked(d.Redis)
+		s.streak = store.NewStreak(d.Redis)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -119,6 +121,8 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/puzzles/ranked", s.limit("puzzles", s.limits.Puzzles, s.handleRankedNext))
 	mux.HandleFunc("POST /api/puzzles/ranked/move", s.limit("move", s.limits.Move, s.handleRankedMove))
 	mux.HandleFunc("GET /api/puzzles/ranked/me", s.handleRankedProfile)
+	mux.HandleFunc("POST /api/puzzles/streak", s.limit("puzzles", s.limits.Puzzles, s.handleStreakStart))
+	mux.HandleFunc("POST /api/puzzles/streak/move", s.limit("move", s.limits.Move, s.handleStreakMove))
 	mux.HandleFunc("GET /api/puzzles/{id}", s.handlePuzzleByID)
 	mux.HandleFunc("POST /api/puzzles/{id}/attempt", s.limit("attempt", s.limits.Move, s.handlePuzzleAttempt))
 	mux.HandleFunc("GET /api/stats", s.handleStats)

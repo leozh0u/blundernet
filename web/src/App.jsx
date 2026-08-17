@@ -6,6 +6,7 @@ import Account from './Account.jsx'
 import Puzzles from './Puzzles.jsx'
 import Ranked from './Ranked.jsx'
 import Profile from './Profile.jsx'
+import Streak from './Streak.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
 
 const api = {
@@ -86,6 +87,7 @@ function outcome(state) {
 // opponent; the puzzle side is six million positions with a search over them,
 // and it is the part somebody would come back to.
 function routeOf(path) {
+  if (path.startsWith('/puzzles/streak')) return 'streak'
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
   if (path.startsWith('/play')) return 'play'
   if (path.startsWith('/me')) return 'me'
@@ -95,10 +97,17 @@ function routeOf(path) {
 // /puzzles/<id> opens one puzzle by itself, which is what a shared link is.
 function sharedPuzzleID(path) {
   const m = path.match(/^\/puzzles\/([A-Za-z0-9]+)$/)
-  return m && m[1] !== 'ranked' ? m[1] : null
+  if (!m || m[1] === 'ranked' || m[1] === 'streak') return null
+  return m[1]
 }
 
-const PATHS = { puzzles: '/', ranked: '/puzzles/ranked', play: '/play', me: '/me' }
+const PATHS = {
+  puzzles: '/',
+  ranked: '/puzzles/ranked',
+  streak: '/puzzles/streak',
+  play: '/play',
+  me: '/me',
+}
 
 export default function App() {
   const [route, setRoute] = useState(() => routeOf(window.location.pathname))
@@ -297,8 +306,18 @@ export default function App() {
             >
               Ranked
             </button>
+            <button
+              role="tab"
+              aria-selected={route === 'streak'}
+              className={route === 'streak' ? 'on' : ''}
+              onClick={() => go('streak')}
+            >
+              Streak
+            </button>
           </div>
-          {route === 'ranked' ? (
+          {route === 'streak' ? (
+            <Streak />
+          ) : route === 'ranked' ? (
             <Ranked />
           ) : (
             <Puzzles shared={sharedPuzzleID(window.location.pathname)} />
