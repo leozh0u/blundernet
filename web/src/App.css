@@ -1257,3 +1257,37 @@ button {
     opacity: 1;
   }
 }
+
+/* The review list: the moves that cost the most, and what they cost. Clicking
+   one puts that position on the board. */
+.worst {
+  margin: 0;
+  padding: 0.25rem 0.5rem 0.5rem;
+  list-style: none;
+}
+
+.worst button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink);
+  font-size: 0.97rem;
+  cursor: pointer;
+}
+
+.worst button:hover {
+  background: var(--surface-sunk);
+}
+
+.worst .san {
+  font-family: var(--mono);
+}
+
+.worst .loss {
+  font-family: var(--mono);
+  color: var(--danger);
+}

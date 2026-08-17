@@ -9,6 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/leozh0u/blundernet/internal/engine"
 	"github.com/leozh0u/blundernet/internal/game"
 	"github.com/leozh0u/blundernet/internal/queue"
 	"github.com/leozh0u/blundernet/internal/store"
@@ -193,3 +194,36 @@ func TestHintOnTheEngineTurnIsDropped(t *testing.T) {
 		t.Errorf("engine was asked for a hint on the bot's turn")
 	}
 }
+
+// The review scores the player's moves and finds the ones that cost the most.
+// The fallback engine is a material count, which makes the arithmetic here
+// checkable by hand: hanging a queen is the worst move in this game.
+func TestReviewFindsTheWorstMove(t *testing.T) {
+	g := game.New("r1", "white", 4, true)
+	// 1. e4 e5 2. Qh5 Nc6 3. Qxf7+?? and black takes the queen with the king.
+	for _, mv := range []string{"e2e4", "e7e5", "d1h5", "b8c6", "h5f7", "e8f7"} {
+		if err := g.ApplyMove(colorFor(g, mv), mv); err != nil {
+			t.Fatalf("%s: %v", mv, err)
+		}
+	}
+
+	out, err := scoreGame(engine.NewMaterial(), g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Moves) != 3 {
+		t.Fatalf("scored %d player moves, want 3", len(out.Moves))
+	}
+	if len(out.Worst) == 0 {
+		t.Fatal("no move was flagged")
+	}
+	if out.Worst[0].SAN != "Qxf7+" {
+		t.Errorf("worst move = %s, want Qxf7+", out.Worst[0].SAN)
+	}
+	if out.Worst[0].Loss <= 0 {
+		t.Errorf("losing a queen scored a loss of %v", out.Worst[0].Loss)
+	}
+}
+
+// colorFor names the side to move, which the game model wants explicitly.
+func colorFor(g *game.Game, _ string) string { return g.Turn() }

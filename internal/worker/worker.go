@@ -112,6 +112,18 @@ func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 	if j.Kind == queue.KindHint {
 		return w.hint(ctx, g, j)
 	}
+	if j.Kind == queue.KindReview {
+		if g.Status != game.StatusFinished {
+			obs.JobOutcome(obs.JobStale)
+			return nil
+		}
+		if err := w.review(ctx, g); err != nil {
+			obs.JobOutcome(obs.JobError)
+			return err
+		}
+		obs.JobOutcome(obs.JobPlayed)
+		return nil
+	}
 
 	// Stale or duplicate delivery: the position has moved past this job.
 	if g.Ply != j.Ply || g.Status != game.StatusOngoing || g.Turn() != g.EngineColor() {

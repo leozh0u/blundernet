@@ -2,9 +2,12 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -74,4 +77,57 @@ func nullableUUID(id string) any {
 		return nil
 	}
 	return id
+}
+
+// Review is what the network thought of each of a player's moves.
+type Review struct {
+	Moves []ReviewMove `json:"moves"`
+	Worst []ReviewMove `json:"worst"`
+}
+
+type ReviewMove struct {
+	Ply    int     `json:"ply"`
+	UCI    string  `json:"uci"`
+	SAN    string  `json:"san"`
+	Before float64 `json:"before"`
+	After  float64 `json:"after"`
+	Loss   float64 `json:"loss"`
+	// Material change in pawns over the same window, negative when it went.
+	Material float64 `json:"material"`
+	FEN      string  `json:"fen"`
+}
+
+// SaveReview stores a finished game's review. Written once and read many
+// times: the numbers cannot change after the last move.
+func (a *Archive) SaveReview(ctx context.Context, gameID string, r Review) error {
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	_, err = a.pool.Exec(ctx,
+		"UPDATE games SET review = $2 WHERE id = $1", gameID, raw)
+	return err
+}
+
+// GetReview returns the stored review, if there is one yet. The second return
+// separates "no review yet" from "no such game", because the first is what a
+// client polling for one is waiting on and the second is a 404.
+func (a *Archive) GetReview(ctx context.Context, gameID string) (Review, bool, error) {
+	var raw []byte
+	err := a.pool.QueryRow(ctx,
+		"SELECT review FROM games WHERE id = $1", gameID).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Review{}, false, ErrNotFound
+	}
+	if err != nil {
+		return Review{}, false, err
+	}
+	if len(raw) == 0 {
+		return Review{}, false, nil
+	}
+	var out Review
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return Review{}, false, err
+	}
+	return out, true, nil
 }

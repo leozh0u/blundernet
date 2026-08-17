@@ -37,6 +37,19 @@ const api = {
   async resign(id) {
     await fetch(`/api/games/${id}/resign`, { method: 'POST' })
   },
+  // The review is engine work, so it is asked for and then waited on. The
+  // worker stores it, which is why a reload can pick it up rather than paying
+  // for the same evaluations twice.
+  async review(id) {
+    await fetch(`/api/games/${id}/review`, { method: 'POST' })
+    for (let i = 0; i < 40; i++) {
+      const res = await fetch(`/api/games/${id}/review`)
+      if (res.status === 200) return res.json()
+      if (res.status !== 202) return null
+      await new Promise((r) => setTimeout(r, 700))
+    }
+    return null
+  },
   async stats() {
     const res = await fetch('/api/stats')
     return res.ok ? res.json() : null
@@ -124,6 +137,8 @@ export default function App() {
   const [level, setLevel] = useState(3)
   const [ladder, setLadder] = useState(null)
   const [hint, setHint] = useState(null)
+  const [review, setReview] = useState(null)
+  const [reviewing, setReviewing] = useState(false)
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -182,6 +197,7 @@ export default function App() {
     setError('')
     setSelected(null)
     setHint(null)
+    setReview(null)
     try {
       const st = await api.createGame(color, mode, level)
       setState(st)
@@ -252,6 +268,12 @@ export default function App() {
     }
     return styles
   }, [selected, legalTargets, state, hint])
+
+  const askForReview = async () => {
+    setReviewing(true)
+    setReview(await api.review(state.id))
+    setReviewing(false)
+  }
 
   const result = state ? outcome(state) : null
   const pairs = state ? movePairs(state.moves) : []
@@ -454,6 +476,38 @@ export default function App() {
                 </>
               )}
             </div>
+
+            {state.status === 'finished' && (
+              <div className="record">
+                <h3>Review</h3>
+                {!review ? (
+                  <div className="after">
+                    <button className="wide" disabled={reviewing} onClick={askForReview}>
+                      {reviewing ? 'Looking at your moves' : 'Review this game'}
+                    </button>
+                  </div>
+                ) : review.worst?.length ? (
+                  <ul className="worst">
+                    {review.worst.map((m) => (
+                      <li key={m.ply}>
+                        <button onClick={() => setState((st) => ({ ...st, fen: m.fen }))}>
+                          <span className="san">
+                            {Math.ceil(m.ply / 2)}. {m.san}
+                          </span>
+                          <span className="loss">
+                            {m.material <= -1
+                              ? `${m.material.toFixed(0)} material`
+                              : `-${m.loss.toFixed(2)}`}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="empty">Nothing stands out. No move cost much.</p>
+                )}
+              </div>
+            )}
 
             <div className="record">
               <h3>Record of play</h3>

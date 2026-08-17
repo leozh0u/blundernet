@@ -20,16 +20,18 @@ import (
 type Job struct {
 	GameID string `json:"game_id"`
 	Ply    int    `json:"ply"`
-	// Kind is empty or "move" for the engine's own reply, and "hint" when the
-	// player asked what they should play. A hint runs the same search and
-	// publishes the answer without touching the game, so one queue and one
-	// worker fleet serve both and a hint cannot corrupt a position.
+	// Kind is empty or "move" for the engine's own reply, "hint" when the
+	// player asked what they should play, and "review" to score a finished
+	// game. None of the other kinds touch game state, so one queue and one
+	// worker fleet serve all of them and a stray delivery cannot corrupt a
+	// position.
 	Kind string `json:"kind,omitempty"`
 }
 
 const (
-	KindMove = "move"
-	KindHint = "hint"
+	KindMove   = "move"
+	KindHint   = "hint"
+	KindReview = "review"
 )
 
 type Message struct {

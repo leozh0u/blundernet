@@ -83,3 +83,21 @@ func evaluate(pos *chess.Position) int {
 	}
 	return score
 }
+
+// Score lets the fallback answer a review too, so the feature works on a
+// clone with no model rather than silently doing nothing. Material only, put
+// on the same [-1, 1] scale the network uses by treating a queen's worth of
+// material as a won position.
+func (m *Material) Score(fen string) (float64, error) {
+	pos, err := ParseFEN(fen)
+	if err != nil {
+		return 0, err
+	}
+	switch pos.Status() {
+	case chess.Checkmate:
+		return -1, nil
+	case chess.Stalemate:
+		return 0, nil
+	}
+	return math.Max(-1, math.Min(1, float64(evaluate(pos))/900)), nil
+}

@@ -56,3 +56,12 @@ func Settings(level int) Level {
 type Leveled interface {
 	BestMoveAt(fen string, level int) (string, error)
 }
+
+// Scorer is implemented by engines that can value a position without picking
+// a move. The post-game review needs one number per position and no search:
+// what the network thought, before and after each move that was played.
+type Scorer interface {
+	// Score returns the value of the position from the side to move's
+	// perspective, in [-1, 1].
+	Score(fen string) (float64, error)
+}

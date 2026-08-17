@@ -110,6 +110,8 @@ func New(d Deps) *Server {
 	mux.HandleFunc("POST /api/games/{id}/moves", s.limit("move", s.limits.Move, s.handleMove))
 	mux.HandleFunc("POST /api/games/{id}/hint", s.limit("move", s.limits.Move, s.handleHint))
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
+	mux.HandleFunc("POST /api/games/{id}/review", s.limit("create", s.limits.CreateGame, s.handleReviewStart))
+	mux.HandleFunc("GET /api/games/{id}/review", s.handleReview)
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
 	mux.HandleFunc("GET /api/puzzles", s.limit("puzzles", s.limits.Puzzles, s.handlePuzzleSearch))
 	mux.HandleFunc("GET /api/puzzles/themes", s.handlePuzzleThemes)
@@ -281,6 +283,59 @@ func (s *Server) handleHint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// handleReviewStart asks a worker to score a finished game. The review is one
+// evaluation per position, which is engine work, so it goes on the queue like
+// every other piece of engine work rather than blocking a request.
+func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
+	if s.archive == nil {
+		httpError(w, http.StatusServiceUnavailable, "the archive is not configured")
+		return
+	}
+	g, err := s.games.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		gameError(w, err)
+		return
+	}
+	if g.Status != game.StatusFinished {
+		httpError(w, http.StatusConflict, "the game is not over")
+		return
+	}
+	// Already done: nothing to queue, and the client can fetch it now.
+	if _, ok, err := s.archive.GetReview(r.Context(), g.ID); err == nil && ok {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if err := s.jobs.Enqueue(r.Context(), queue.Job{
+		GameID: g.ID, Ply: g.Ply, Kind: queue.KindReview,
+	}); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// handleReview returns the review, or 202 while it is still being worked out.
+func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
+	if s.archive == nil {
+		httpError(w, http.StatusServiceUnavailable, "the archive is not configured")
+		return
+	}
+	review, ok, err := s.archive.GetReview(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		httpError(w, http.StatusNotFound, "no such game")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	writeJSON(w, http.StatusOK, review)
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {

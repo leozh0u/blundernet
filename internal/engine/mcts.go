@@ -37,6 +37,24 @@ func NewMCTS(eval Evaluator, sims int) *MCTS {
 
 func (m *MCTS) Name() string { return fmt.Sprintf("blundernet-mcts-%d", m.sims) }
 
+// Score is the value head on its own, with no search over it. Used by the
+// post-game review, which wants what the network thought of a position rather
+// than what it would play there.
+func (m *MCTS) Score(fen string) (float64, error) {
+	pos, err := ParseFEN(fen)
+	if err != nil {
+		return 0, err
+	}
+	if v, done := terminalValue(pos); done {
+		return v, nil
+	}
+	_, value, err := m.eval.Evaluate(pos)
+	if err != nil {
+		return 0, err
+	}
+	return float64(value), nil
+}
+
 // node mirrors the training implementation: children are stored in
 // parallel with the legal moves that lead to them.
 type node struct {
