@@ -1214,3 +1214,38 @@ button {
 .whoami:hover {
   text-decoration: underline;
 }
+
+/* The hint overlay. Drawn over the board rather than on it, so a hint can
+   point somewhere instead of only colouring a square. */
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--blue);
+}
+
+.board-overlay .glow {
+  fill: rgba(74, 144, 217, 0.25);
+  stroke: var(--blue);
+  stroke-width: 0.08;
+  animation: hintpulse 1.5s ease-in-out infinite;
+}
+
+.board-overlay .arrow {
+  stroke: var(--blue);
+  stroke-width: 0.16;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+@keyframes hintpulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}

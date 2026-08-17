@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
+import BoardOverlay from './BoardOverlay.jsx'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -97,7 +98,15 @@ export default function Puzzles() {
   const [step, setStep] = useState(0) // how far into the solution we are
   const [phase, setPhase] = useState('loading') // loading, solving, solved, failed, empty
   const [selected, setSelected] = useState(null)
-  const [hints, setHints] = useState(0)
+  // The ladder resets on each move of the solution, so a four move puzzle
+  // gets four chances to be pointed at. hintsUsed is the running total, which
+  // is what goes on the attempt: solving cold and solving after six nudges
+  // are different things.
+  const [hintLevel, setHintLevel] = useState(0)
+  // The total lives in a ref as well as in state, because the attempt is
+  // recorded from inside a click handler and a state read there is one press
+  // out of date.
+  const hintsUsed = useRef(0)
   const [saved, setSaved] = useState(false)
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
@@ -150,7 +159,8 @@ export default function Puzzles() {
       setPuzzle(p)
       setStep(0)
       setSelected(null)
-      setHints(0)
+      setHintLevel(0)
+      hintsUsed.current = 0
       setSaved(!!p.saved)
       setPhase('setup')
       const before = new Chess(p.fen)
@@ -279,7 +289,7 @@ export default function Puzzles() {
   const showSolution = () => {
     if (phase !== 'solving' || !puzzle || !board) return
     setPhase('failed')
-    record(puzzle.id, false, hints)
+    record(puzzle.id, false, hintsUsed.current)
     revealFrom(new Chess(board.fen()), puzzle.solution, step)
   }
 
@@ -302,13 +312,22 @@ export default function Puzzles() {
     if (!right) {
       setBoard(probe)
       setPhase('failed')
-      record(puzzle.id, false, hints)
+      record(puzzle.id, false, hintsUsed.current)
       const truth = new Chess(board.fen())
       revealFrom(truth, puzzle.solution, step)
       return true
     }
 
-    // Play the solver's move, then the opponent's forced reply.
+    playSolutionMove()
+    return true
+  }
+
+  // Plays the solution move for this step and then the opponent's forced
+  // reply. Shared by a correct move and by the last rung of the hint ladder,
+  // because "play it for me" and "I found it" leave the board in the same
+  // place and only differ in what gets recorded.
+  const playSolutionMove = () => {
+    const want = puzzle.solution[step]
     const played = new Chess(board.fen())
     played.move({
       from: want.slice(0, 2),
@@ -316,13 +335,14 @@ export default function Puzzles() {
       promotion: want[4] || undefined,
     })
     setBoard(played)
+    setHintLevel(0)
 
     const nextStep = step + 1
     if (nextStep >= puzzle.solution.length) {
       setStep(nextStep)
       setPhase('solved')
-      record(puzzle.id, true, hints)
-      return true
+      record(puzzle.id, true, hintsUsed.current)
+      return
     }
     const reply = puzzle.solution[nextStep]
     later(() => {
@@ -336,7 +356,17 @@ export default function Puzzles() {
       setStep(nextStep + 1)
     }, 350)
     setStep(nextStep)
-    return true
+  }
+
+  // The ladder: light the piece, point at the square, then play it.
+  const takeHint = () => {
+    if (phase !== 'solving' || !puzzle || !board) return
+    hintsUsed.current += 1
+    if (hintLevel < 2) {
+      setHintLevel(hintLevel + 1)
+      return
+    }
+    playSolutionMove()
   }
 
   const onSquareClick = (square) => {
@@ -358,7 +388,7 @@ export default function Puzzles() {
   // count is sent with the attempt: solving cold and solving after three
   // hints are different things and the wrong-answer list should know.
   const hint = useMemo(() => {
-    if (!puzzle || !board || hints === 0 || phase !== 'solving' || !puzzle.solution) {
+    if (!puzzle?.solution || !board || hintLevel === 0 || phase !== 'solving') {
       return null
     }
     const want = puzzle.solution[step]
@@ -368,28 +398,11 @@ export default function Puzzles() {
     const piece = board.get(from)
     const name = PIECE_NAMES[piece?.type] || 'piece'
 
-    // First hint: the kind of piece, with every one of yours lit up. Second:
-    // which one. Third: where it goes. Each one shows on the board, because a
-    // hint that only prints a sentence in the corner reads as nothing
-    // happening.
-    if (hints === 1) {
-      const mine = puzzle.color === 'white' ? 'w' : 'b'
-      const squares = []
-      for (const file of 'abcdefgh') {
-        for (let rank = 1; rank <= 8; rank++) {
-          const sq = file + rank
-          const p = board.get(sq)
-          if (p && p.type === piece?.type && p.color === mine) squares.push(sq)
-        }
-      }
-      return { text: `A ${name} move.`, squares }
-    }
-    if (hints === 2) return { text: `The ${name} on ${from}.`, squares: [from] }
-
-    const probe = new Chess(board.fen())
-    const mv = probe.move({ from, to, promotion: want[4] || undefined })
-    return { text: mv ? mv.san : want, squares: [from], target: to }
-  }, [puzzle, board, hints, step, phase])
+    // One: light up the piece that moves. Two: point at where it goes. Three
+    // plays it, which happens in the button rather than here.
+    if (hintLevel === 1) return { glow: from, text: `The ${name} moves.` }
+    return { glow: from, arrow: { from, to }, text: `The ${name} goes to ${to}.` }
+  }, [puzzle, board, hintLevel, step, phase])
 
   const squareStyles = useMemo(() => {
     const styles = {}
@@ -399,12 +412,6 @@ export default function Puzzles() {
       for (const sq of [last.from, last.to]) {
         styles[sq] = { background: 'rgba(246, 200, 92, 0.45)' }
       }
-    }
-    for (const sq of hint?.squares || []) {
-      styles[sq] = { background: 'rgba(74, 144, 217, 0.55)' }
-    }
-    if (hint?.target) {
-      styles[hint.target] = { background: 'rgba(74, 144, 217, 0.3)' }
     }
     if (selected) styles[selected] = { background: 'rgba(246, 200, 92, 0.6)' }
     for (const sq of legalTargets) {
@@ -573,6 +580,11 @@ export default function Puzzles() {
                 customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
                 customSquareStyles={squareStyles}
               />
+              <BoardOverlay
+                orientation={puzzle?.color || 'white'}
+                glow={hint?.glow}
+                arrow={hint?.arrow}
+              />
             </div>
           </div>
 
@@ -659,12 +671,8 @@ export default function Puzzles() {
 
             {phase === 'solving' && (
               <div className="during">
-                <button
-                  className="wide"
-                  disabled={hints >= 3}
-                  onClick={() => setHints((h) => Math.min(3, h + 1))}
-                >
-                  {hints === 0 ? 'Hint' : hints < 3 ? 'Another hint' : 'No more hints'}
+                <button className="wide" onClick={takeHint}>
+                  {hintLevel === 0 ? 'Hint' : hintLevel === 1 ? 'Show where' : 'Play it'}
                 </button>
                 <button className="ghost wide" onClick={showSolution}>
                   Show solution

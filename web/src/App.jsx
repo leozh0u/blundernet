@@ -6,6 +6,7 @@ import Account from './Account.jsx'
 import Puzzles from './Puzzles.jsx'
 import Ranked from './Ranked.jsx'
 import Profile from './Profile.jsx'
+import BoardOverlay from './BoardOverlay.jsx'
 
 const api = {
   async createGame(color, mode, level) {
@@ -224,10 +225,6 @@ export default function App() {
         styles[sq] = { background: 'rgba(246, 200, 92, 0.45)' }
       }
     }
-    if (hint) {
-      styles[hint.from] = { background: 'rgba(74, 144, 217, 0.55)' }
-      styles[hint.to] = { background: 'rgba(74, 144, 217, 0.35)' }
-    }
     if (selected) {
       styles[selected] = { background: 'rgba(246, 200, 92, 0.6)' }
     }
@@ -391,6 +388,11 @@ export default function App() {
                 customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
                 customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
                 customSquareStyles={squareStyles}
+              />
+              <BoardOverlay
+                orientation={state.player_color}
+                glow={hint?.from}
+                arrow={hint}
               />
               {result && (
                 <div className="overlay">
