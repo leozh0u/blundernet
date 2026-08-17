@@ -338,20 +338,37 @@ export default function Puzzles() {
   // count is sent with the attempt: solving cold and solving after three
   // hints are different things and the wrong-answer list should know.
   const hint = useMemo(() => {
-    if (!puzzle || !board || hints === 0 || phase !== 'solving') return null
+    if (!puzzle || !board || hints === 0 || phase !== 'solving' || !puzzle.solution) {
+      return null
+    }
     const want = puzzle.solution[step]
     if (!want) return null
     const from = want.slice(0, 2)
+    const to = want.slice(2, 4)
     const piece = board.get(from)
-    if (hints === 1) return { text: `Move the ${PIECE_NAMES[piece?.type] || 'piece'}.` }
-    if (hints === 2) return { text: `The ${PIECE_NAMES[piece?.type] || 'piece'} on ${from} moves.`, from }
+    const name = PIECE_NAMES[piece?.type] || 'piece'
+
+    // First hint: the kind of piece, with every one of yours lit up. Second:
+    // which one. Third: where it goes. Each one shows on the board, because a
+    // hint that only prints a sentence in the corner reads as nothing
+    // happening.
+    if (hints === 1) {
+      const mine = puzzle.color === 'white' ? 'w' : 'b'
+      const squares = []
+      for (const file of 'abcdefgh') {
+        for (let rank = 1; rank <= 8; rank++) {
+          const sq = file + rank
+          const p = board.get(sq)
+          if (p && p.type === piece?.type && p.color === mine) squares.push(sq)
+        }
+      }
+      return { text: `A ${name} move.`, squares }
+    }
+    if (hints === 2) return { text: `The ${name} on ${from}.`, squares: [from] }
+
     const probe = new Chess(board.fen())
-    const mv = probe.move({
-      from,
-      to: want.slice(2, 4),
-      promotion: want[4] || undefined,
-    })
-    return { text: `Play ${mv ? mv.san : want}.`, from }
+    const mv = probe.move({ from, to, promotion: want[4] || undefined })
+    return { text: mv ? mv.san : want, squares: [from], target: to }
   }, [puzzle, board, hints, step, phase])
 
   const squareStyles = useMemo(() => {
@@ -363,8 +380,11 @@ export default function Puzzles() {
         styles[sq] = { background: 'rgba(246, 200, 92, 0.45)' }
       }
     }
-    if (hint?.from) {
-      styles[hint.from] = { background: 'rgba(74, 144, 217, 0.6)' }
+    for (const sq of hint?.squares || []) {
+      styles[sq] = { background: 'rgba(74, 144, 217, 0.55)' }
+    }
+    if (hint?.target) {
+      styles[hint.target] = { background: 'rgba(74, 144, 217, 0.3)' }
     }
     if (selected) styles[selected] = { background: 'rgba(246, 200, 92, 0.6)' }
     for (const sq of legalTargets) {
@@ -569,15 +589,15 @@ export default function Puzzles() {
                     ))}
                   </div>
                 )}
-                {(phase === 'solved' || phase === 'failed') && (
-                  <ul className="themes">
-                    {puzzle.themes
-                      .filter((t) => COMMON_THEMES.includes(t))
-                      .map((t) => (
-                        <li key={t}>{titleCase(t)}</li>
-                      ))}
-                  </ul>
-                )}
+                {(phase === 'solved' || phase === 'failed') &&
+                  puzzle.themes.some((t) => COMMON_THEMES.includes(t)) && (
+                    <p className="themes">
+                      {puzzle.themes
+                        .filter((t) => COMMON_THEMES.includes(t))
+                        .map(titleCase)
+                        .join(' · ')}
+                    </p>
+                  )}
               </div>
             )}
 

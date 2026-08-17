@@ -872,20 +872,9 @@ button {
 }
 
 .themes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin: 0;
   padding: 0 0.75rem 0.75rem;
-  list-style: none;
-}
-
-.themes li {
-  padding: 0.15rem 0.5rem;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  font-size: 0.9rem;
-  color: var(--ink-soft);
+  font-size: 0.94rem;
+  color: var(--ink-faint);
 }
 
 .after {
@@ -915,6 +904,33 @@ button {
   }
   .filter-label {
     width: auto;
+  }
+
+  /* Board first on a phone. The filter card is five rows of chips and pushes
+     the puzzle off the screen, which turns the front page into a form. */
+  .puzzles {
+    display: flex;
+    flex-direction: column;
+  }
+  .puzzle-body {
+    order: 1;
+  }
+  .filters {
+    order: 2;
+    margin-top: 1rem;
+  }
+
+  /* The bar runs out of room around 500px, and the account strip is the part
+     that can afford to drop to its own line. */
+  .bar {
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+    gap: 0.75rem;
+  }
+  .bar .account {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
   }
 }
 
