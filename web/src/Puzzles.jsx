@@ -253,6 +253,16 @@ export default function Puzzles() {
     [later],
   )
 
+  // Giving up is a real thing people do, and without it the only way out of a
+  // puzzle you cannot see is to guess wrong on purpose or skip it, which is
+  // worse: the drill list would never learn you were stuck on this one.
+  const showSolution = () => {
+    if (phase !== 'solving' || !puzzle || !board) return
+    setPhase('failed')
+    record(puzzle.id, false, hints)
+    revealFrom(new Chess(board.fen()), puzzle.solution, step)
+  }
+
   const tryMove = (from, to) => {
     if (phase !== 'solving' || !puzzle || !board) return false
     const probe = new Chess(board.fen())
@@ -525,27 +535,11 @@ export default function Puzzles() {
                   <span className="head">
                     {puzzle.color === 'white' ? 'White' : 'Black'} to play
                   </span>
-                  <span className="hint">
-                    {hint
-                      ? hint.text
-                      : puzzle.moves === 1
-                        ? 'One move wins it.'
-                        : `${puzzle.moves} moves, and only one line works.`}
-                  </span>
+                  {hint && <span className="hint">{hint.text}</span>}
                 </>
               )}
-              {phase === 'solved' && (
-                <>
-                  <span className="head">Solved</span>
-                  <span className="hint">That was the line.</span>
-                </>
-              )}
-              {phase === 'failed' && (
-                <>
-                  <span className="head">Not that one</span>
-                  <span className="hint">Playing out the answer.</span>
-                </>
-              )}
+              {phase === 'solved' && <span className="head">Solved</span>}
+              {phase === 'failed' && <span className="head">Missed</span>}
             </div>
 
             {puzzle && (
@@ -606,11 +600,14 @@ export default function Puzzles() {
             {phase === 'solving' && (
               <div className="during">
                 <button
-                  className="ghost wide"
+                  className="wide"
                   disabled={hints >= 3}
                   onClick={() => setHints((h) => Math.min(3, h + 1))}
                 >
                   {hints === 0 ? 'Hint' : hints < 3 ? 'Another hint' : 'No more hints'}
+                </button>
+                <button className="ghost wide" onClick={showSolution}>
+                  Show solution
                 </button>
                 <button className="ghost wide" onClick={next}>
                   Skip

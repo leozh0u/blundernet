@@ -100,7 +100,7 @@ button {
 
 /* The page title and the one line saying what this page is. */
 .pagehead {
-  padding: 1.25rem 0 0;
+  padding: 1.25rem 0 0.25rem;
 }
 
 .pagehead h1 {
@@ -894,35 +894,6 @@ button {
   gap: 0.5rem;
 }
 
-.after .wide {
-  width: 100%;
-  padding: 0.55rem 1.1rem;
-  border: 1px solid var(--blue);
-  border-radius: var(--radius);
-  background: var(--blue);
-  color: #0d1926;
-  font-size: 0.97rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.after .wide:hover {
-  background: var(--blue-deep);
-}
-
-.after .ghost.wide {
-  margin-top: 0;
-  border-color: var(--line-strong);
-  background: var(--surface);
-  color: var(--ink);
-  font-weight: 400;
-}
-
-.after .ghost.wide:hover {
-  background: var(--surface);
-  border-color: var(--ink-faint);
-}
-
 .after .source {
   text-align: center;
   font-size: 0.94rem;
@@ -970,10 +941,6 @@ button {
   gap: 0.5rem;
 }
 
-.during .ghost.wide {
-  margin-top: 0;
-}
-
 .during button:disabled {
   color: var(--ink-faint);
   cursor: default;
@@ -1000,12 +967,6 @@ button {
   color: var(--ink-soft);
   font-size: 1rem;
   cursor: pointer;
-}
-
-.modenote {
-  margin-left: 0.5rem;
-  font-size: 0.95rem;
-  color: var(--ink-faint);
 }
 
 .modes button:hover {
@@ -1043,4 +1004,65 @@ button {
 
 .ranked-gate button:hover {
   background: var(--blue-deep);
+}
+
+/* Panel actions. One filled button for the thing you probably want, the rest
+   outlined. Same shape and size for all of them, so the column reads as a
+   list rather than as three different kinds of control. */
+.during,
+.after {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.during button,
+.after button,
+.after .source {
+  width: 100%;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.97rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.during button:hover,
+.after button:hover {
+  border-color: var(--ink-faint);
+}
+
+.during button.wide:not(.ghost),
+.after button.wide:not(.ghost) {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #0d1926;
+  font-weight: 600;
+}
+
+.during button.wide:not(.ghost):hover,
+.after button.wide:not(.ghost):hover {
+  border-color: var(--blue-deep);
+  background: var(--blue-deep);
+}
+
+.during button:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.during button.wide:not(.ghost):disabled {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  font-weight: 400;
+}
+
+.after .source {
+  border-color: transparent;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 0.94rem;
 }

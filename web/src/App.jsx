@@ -61,14 +61,12 @@ function movePairs(moves) {
 function outcome(state) {
   if (state.status !== 'finished') return null
   if (state.result === '1/2-1/2') {
-    return { kind: 'draw', title: 'A draw', flavour: 'Honours even.' }
+    return { kind: 'draw', title: 'Draw' }
   }
   const won =
     (state.result === '1-0' && state.player_color === 'white') ||
     (state.result === '0-1' && state.player_color === 'black')
-  return won
-    ? { kind: 'win', title: 'Victory', flavour: 'The automaton is beaten.' }
-    : { kind: 'loss', title: 'Defeat', flavour: 'The automaton prevails.' }
+  return won ? { kind: 'win', title: 'You won' } : { kind: 'loss', title: 'You lost' }
 }
 
 // Three pages, and no router library for three pages. The path is read on
@@ -234,7 +232,6 @@ export default function App() {
         <>
           <div className="pagehead">
             <h1>Puzzles</h1>
-            <p>Six million from Lichess, filtered how you want, explained after every one.</p>
           </div>
           <div className="modes" role="tablist">
             <button
@@ -253,11 +250,6 @@ export default function App() {
             >
               Ranked
             </button>
-            <span className="modenote">
-              {route === 'ranked'
-                ? 'One at your level, no hints, and the rating moves. Account needed.'
-                : 'Filter, drill, take a hint. Nothing here is scored.'}
-            </span>
           </div>
           {route === 'ranked' ? <Ranked /> : <Puzzles />}
         </>
@@ -274,13 +266,11 @@ export default function App() {
           <div className="choices">
             <button className="choice light" onClick={() => newGame('white')}>
               <span className="seal light">♔</span>
-              <span className="label">Play White</span>
-              <span className="sub">You open</span>
+              <span className="label">White</span>
             </button>
             <button className="choice dark" onClick={() => newGame('black')}>
               <span className="seal dark">♚</span>
-              <span className="label">Play Black</span>
-              <span className="sub">It opens</span>
+              <span className="label">Black</span>
             </button>
           </div>
           {stats && stats.total > 0 && (
@@ -325,7 +315,6 @@ export default function App() {
                   <div className={`verdict ${result.kind}`}>
                     <div className="wax">♞</div>
                     <h2>{result.title}</h2>
-                    <p className="flavour">{result.flavour}</p>
                     <p className="cause">{state.termination}</p>
                     <div className="again">
                       <button onClick={() => newGame('white')}>Play again as White</button>
@@ -344,15 +333,11 @@ export default function App() {
               {state.status === 'finished' ? (
                 <span className="head">The game is done</span>
               ) : myTurn ? (
-                <>
-                  <span className="head">Your move</span>
-                  <span className="hint">Drag a piece, or tap it and its square.</span>
-                </>
+                <span className="head">Your move</span>
               ) : (
                 <>
-                  <span className="head">The automaton deliberates</span>
+                  <span className="head">Thinking</span>
                   <SearchTree />
-                  <span className="hint mono">searching · 300 sims</span>
                 </>
               )}
             </div>

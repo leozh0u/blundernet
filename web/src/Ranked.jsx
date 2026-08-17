@@ -265,8 +265,7 @@ export default function Ranked() {
                 {puzzle.color === 'white' ? 'White' : 'Black'} to play
               </span>
               <span className="hint">
-                {puzzle.moves === 1 ? 'One move.' : `${puzzle.moves} moves.`} No
-                hints, one try.
+                {puzzle.moves === 1 ? 'One move' : `${puzzle.moves} moves`}
               </span>
             </>
           )}
