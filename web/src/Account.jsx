@@ -23,6 +23,16 @@ export default function Account({ refreshKey }) {
     load()
   }, [load, refreshKey])
 
+  // Ranked puzzles are the one thing on the site that needs an account, so
+  // that page asks for the dialog rather than owning a second copy of it. An
+  // event rather than lifted state: this is the only caller, and hoisting the
+  // form into App to serve it would spread auth across three components.
+  useEffect(() => {
+    const open = (e) => setForm(e.detail === 'login' ? 'login' : 'signup')
+    window.addEventListener('blundernet:auth', open)
+    return () => window.removeEventListener('blundernet:auth', open)
+  }, [])
+
   const rating = displayRating(profile)
   const isGuest = !user || user.guest
 
@@ -80,6 +90,9 @@ export default function Account({ refreshKey }) {
           onDone={() => {
             setForm(null)
             load()
+            // Ranked mode is gated on having an account, so it needs to know
+            // the moment one exists rather than on the next page load.
+            window.dispatchEvent(new CustomEvent('blundernet:authed'))
           }}
           onSwitch={(m) => setForm(m)}
         />

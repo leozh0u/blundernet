@@ -4,6 +4,7 @@ import { Chess } from 'chess.js'
 import SearchTree from './SearchTree.jsx'
 import Account from './Account.jsx'
 import Puzzles from './Puzzles.jsx'
+import Ranked from './Ranked.jsx'
 
 const api = {
   async createGame(color) {
@@ -74,8 +75,12 @@ function outcome(state) {
 // and pushed on a click, so both are linkable and the back button works. The
 // server already serves index.html for any path.
 function routeOf(path) {
-  return path.startsWith('/puzzles') ? 'puzzles' : 'play'
+  if (path.startsWith('/puzzles/ranked')) return 'ranked'
+  if (path.startsWith('/puzzles')) return 'puzzles'
+  return 'play'
 }
+
+const PATHS = { play: '/', puzzles: '/puzzles', ranked: '/puzzles/ranked' }
 
 export default function App() {
   const [route, setRoute] = useState(() => routeOf(window.location.pathname))
@@ -101,7 +106,7 @@ export default function App() {
   }, [])
 
   const go = (to) => {
-    window.history.pushState({}, '', to === 'puzzles' ? '/puzzles' : '/')
+    window.history.pushState({}, '', PATHS[to])
     setRoute(to)
   }
 
@@ -217,7 +222,10 @@ export default function App() {
           <button className={route === 'play' ? 'on' : ''} onClick={() => go('play')}>
             Play
           </button>
-          <button className={route === 'puzzles' ? 'on' : ''} onClick={() => go('puzzles')}>
+          <button
+            className={route === 'play' ? '' : 'on'}
+            onClick={() => go('puzzles')}
+          >
             Puzzles
           </button>
         </nav>
@@ -243,8 +251,30 @@ export default function App() {
         )}
       </header>
 
-      {route === 'puzzles' ? (
-        <Puzzles />
+      {route !== 'play' ? (
+        <>
+          <div className="modes" role="tablist">
+            <button
+              role="tab"
+              aria-selected={route === 'puzzles'}
+              className={route === 'puzzles' ? 'on' : ''}
+              onClick={() => go('puzzles')}
+            >
+              Learning
+              <span className="sub">Filters, hints, no rating</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={route === 'ranked'}
+              className={route === 'ranked' ? 'on' : ''}
+              onClick={() => go('ranked')}
+            >
+              Ranked
+              <span className="sub">One puzzle at your level</span>
+            </button>
+          </div>
+          {route === 'ranked' ? <Ranked /> : <Puzzles />}
+        </>
       ) : !state ? (
         <section className="lobby">
           <h2>Play the engine</h2>

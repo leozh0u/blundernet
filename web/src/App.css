@@ -944,3 +944,68 @@ button {
 .during button:disabled:hover {
   border-color: var(--line-strong);
 }
+
+/* Learning and ranked are different products sharing a corpus, so they get a
+   real switch rather than a filter that happens to change the rules. */
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.modes button {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modes button:hover {
+  color: var(--ink);
+}
+
+.modes button.on {
+  border-color: var(--green);
+  background: var(--green-wash);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.modes .sub {
+  font-size: 0.94rem;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+.ranked-gate {
+  max-width: 36rem;
+  padding: 2rem 0;
+}
+
+.ranked-gate p {
+  margin-top: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.ranked-gate button {
+  margin-top: 1.25rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  background: var(--green);
+  color: #14200a;
+  font-size: 0.97rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ranked-gate button:hover {
+  background: var(--green-deep);
+}
