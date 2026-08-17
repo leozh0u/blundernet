@@ -92,6 +92,12 @@ function routeOf(path) {
   return 'puzzles'
 }
 
+// /puzzles/<id> opens one puzzle by itself, which is what a shared link is.
+function sharedPuzzleID(path) {
+  const m = path.match(/^\/puzzles\/([A-Za-z0-9]+)$/)
+  return m && m[1] !== 'ranked' ? m[1] : null
+}
+
 const PATHS = { puzzles: '/', ranked: '/puzzles/ranked', play: '/play', me: '/me' }
 
 export default function App() {
@@ -292,7 +298,11 @@ export default function App() {
               Ranked
             </button>
           </div>
-          {route === 'ranked' ? <Ranked /> : <Puzzles />}
+          {route === 'ranked' ? (
+            <Ranked />
+          ) : (
+            <Puzzles shared={sharedPuzzleID(window.location.pathname)} />
+          )}
         </>
       ) : !state ? (
         <section className="lobby">

@@ -1112,8 +1112,16 @@ button {
 .record-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.25rem;
   padding-right: 0.25rem;
+}
+
+.record-head h3 {
+  margin-right: auto;
+}
+
+.record-head .star:not(.on):first-of-type {
+  font-size: 0.94rem;
 }
 
 .record-head h3 {

@@ -92,7 +92,7 @@ const uciOf = (mv) => mv.from + mv.to + (mv.promotion || '')
 
 const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }
 
-export default function Puzzles() {
+export default function Puzzles({ shared }) {
   const [filter, setFilter] = useState(filterFromURL)
   const [queue, setQueue] = useState([])
   const [puzzle, setPuzzle] = useState(null)
@@ -205,6 +205,23 @@ export default function Puzzles() {
   )
 
   useEffect(() => {
+    // A shared link names one puzzle, so that is the whole batch.
+    if (shared) {
+      setPhase('loading')
+      fetch(`/api/puzzles/${shared}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((p) => {
+          if (p) {
+            setQueue([])
+            present(p)
+          } else {
+            setError('That puzzle does not exist.')
+            setPhase('empty')
+          }
+        })
+        .catch(() => setPhase('empty'))
+      return
+    }
     load(filter)
     // Only on mount and on an explicit filter change, which calls load itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,14 +236,17 @@ export default function Puzzles() {
       .catch(() => {})
   }, [])
 
-  // Flipping between the search and the wrong-answer list reloads, since they
-  // are two different queries rather than two views of one.
-  const firstRender = useRef(true)
+  // Flipping between the search and one of your lists reloads, since they are
+  // different queries rather than two views of one.
+  //
+  // The guard compares the value rather than counting renders. A "first
+  // render" flag looks equivalent and is not: React runs mount effects twice
+  // in development, so the flag was spent on the first pass and the second
+  // pass ran a search that overwrote whatever the page had just loaded.
+  const lastSource = useRef(source)
   useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false
-      return
-    }
+    if (lastSource.current === source) return
+    lastSource.current = source
     load(filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source])
@@ -258,6 +278,21 @@ export default function Puzzles() {
       method: next ? 'POST' : 'DELETE',
     })
     if (!res.ok) setSaved(!next)
+  }
+
+  // Copying the link is the whole share feature. No dialog, no service, and
+  // the URL is one somebody can paste anywhere.
+  const [copied, setCopied] = useState(false)
+  const share = async () => {
+    if (!puzzle) return
+    const url = `${window.location.origin}/puzzles/${puzzle.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      later(() => setCopied(false), 1600)
+    } catch {
+      window.prompt('Copy this link', url)
+    }
   }
 
   const record = useCallback((id, solved, hints) => {
@@ -637,6 +672,9 @@ export default function Puzzles() {
               <div className="record">
                 <div className="record-head">
                   <h3>This puzzle</h3>
+                  <button className="star" onClick={share} title="Copy a link to this puzzle">
+                    {copied ? 'copied' : 'link'}
+                  </button>
                   <button
                     className={`star ${saved ? 'on' : ''}`}
                     onClick={toggleSave}
