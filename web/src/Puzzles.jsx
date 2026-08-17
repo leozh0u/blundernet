@@ -350,17 +350,17 @@ export default function Puzzles() {
     const last = history[history.length - 1]
     if (last) {
       for (const sq of [last.from, last.to]) {
-        styles[sq] = { background: 'rgba(203, 150, 60, 0.38)' }
+        styles[sq] = { background: 'rgba(246, 200, 92, 0.45)' }
       }
     }
     if (hint?.from) {
-      styles[hint.from] = { background: 'rgba(129, 182, 76, 0.55)' }
+      styles[hint.from] = { background: 'rgba(74, 144, 217, 0.6)' }
     }
-    if (selected) styles[selected] = { background: 'rgba(203, 150, 60, 0.55)' }
+    if (selected) styles[selected] = { background: 'rgba(246, 200, 92, 0.6)' }
     for (const sq of legalTargets) {
       styles[sq] = {
         ...styles[sq],
-        background: 'radial-gradient(circle, rgba(20,20,20,0.35) 20%, transparent 22%)',
+        background: 'radial-gradient(circle, rgba(16,28,40,0.42) 20%, transparent 22%)',
       }
     }
     return styles
@@ -509,8 +509,8 @@ export default function Puzzles() {
                 boardOrientation={puzzle?.color || 'white'}
                 arePiecesDraggable={phase === 'solving'}
                 customBoardStyle={{ borderRadius: '6px' }}
-                customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
+                customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
+                customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
                 customSquareStyles={squareStyles}
               />
             </div>

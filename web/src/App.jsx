@@ -71,16 +71,20 @@ function outcome(state) {
     : { kind: 'loss', title: 'Defeat', flavour: 'The automaton prevails.' }
 }
 
-// Two pages, and no router library for two pages. The path is read on load
-// and pushed on a click, so both are linkable and the back button works. The
-// server already serves index.html for any path.
+// Three pages, and no router library for three pages. The path is read on
+// load and pushed on a click, so every page is linkable and the back button
+// works. The server already serves index.html for any path.
+//
+// Puzzles are the front page. Playing the engine is one model against one
+// opponent; the puzzle side is six million positions with a search over them,
+// and it is the part somebody would come back to.
 function routeOf(path) {
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
-  if (path.startsWith('/puzzles')) return 'puzzles'
-  return 'play'
+  if (path.startsWith('/play')) return 'play'
+  return 'puzzles'
 }
 
-const PATHS = { play: '/', puzzles: '/puzzles', ranked: '/puzzles/ranked' }
+const PATHS = { puzzles: '/', ranked: '/puzzles/ranked', play: '/play' }
 
 export default function App() {
   const [route, setRoute] = useState(() => routeOf(window.location.pathname))
@@ -186,17 +190,17 @@ export default function App() {
     const last = state?.moves?.[state.moves.length - 1]
     if (last) {
       for (const sq of [last.slice(0, 2), last.slice(2, 4)]) {
-        styles[sq] = { background: 'rgba(203, 150, 60, 0.38)' }
+        styles[sq] = { background: 'rgba(246, 200, 92, 0.45)' }
       }
     }
     if (selected) {
-      styles[selected] = { background: 'rgba(203, 150, 60, 0.55)' }
+      styles[selected] = { background: 'rgba(246, 200, 92, 0.6)' }
     }
     for (const sq of legalTargets) {
       styles[sq] = {
         ...styles[sq],
         background:
-          'radial-gradient(circle, rgba(78,58,34,0.45) 20%, transparent 22%)',
+          'radial-gradient(circle, rgba(16,28,40,0.42) 20%, transparent 22%)',
       }
     }
     return styles
@@ -207,52 +211,31 @@ export default function App() {
 
   return (
     <div className="page">
-      <Account refreshKey={ratingKey} />
-      <header className="masthead">
-        <div className="crest">
-          <span className="knight">♞</span>
-        </div>
-        <div className="titles">
-          <h1>BlunderNet</h1>
-          <p className="rule">
-            <span>Play a neural network</span>
-          </p>
-        </div>
+      <header className="bar">
+        <button className="brand" onClick={() => go('puzzles')}>
+          <span className="crest">♞</span>
+          <span className="word">BlunderNet</span>
+        </button>
         <nav className="nav">
-          <button className={route === 'play' ? 'on' : ''} onClick={() => go('play')}>
-            Play
-          </button>
           <button
             className={route === 'play' ? '' : 'on'}
             onClick={() => go('puzzles')}
           >
             Puzzles
           </button>
+          <button className={route === 'play' ? 'on' : ''} onClick={() => go('play')}>
+            Play
+          </button>
         </nav>
-        {route === 'play' && stats && stats.total > 0 && (
-          <dl className="ledger">
-            <div>
-              <dt>Games</dt>
-              <dd>{stats.total}</dd>
-            </div>
-            <div>
-              <dt>Engine</dt>
-              <dd>{stats.engine_wins}</dd>
-            </div>
-            <div>
-              <dt>Players</dt>
-              <dd>{stats.player_wins}</dd>
-            </div>
-            <div>
-              <dt>Draws</dt>
-              <dd>{stats.draws}</dd>
-            </div>
-          </dl>
-        )}
+        <Account refreshKey={ratingKey} />
       </header>
 
       {route !== 'play' ? (
         <>
+          <div className="pagehead">
+            <h1>Puzzles</h1>
+            <p>Six million from Lichess, filtered how you want, explained after every one.</p>
+          </div>
           <div className="modes" role="tablist">
             <button
               role="tab"
@@ -261,7 +244,6 @@ export default function App() {
               onClick={() => go('puzzles')}
             >
               Learning
-              <span className="sub">Filters, hints, no rating</span>
             </button>
             <button
               role="tab"
@@ -270,35 +252,58 @@ export default function App() {
               onClick={() => go('ranked')}
             >
               Ranked
-              <span className="sub">One puzzle at your level</span>
             </button>
+            <span className="modenote">
+              {route === 'ranked'
+                ? 'One at your level, no hints, and the rating moves. Account needed.'
+                : 'Filter, drill, take a hint. Nothing here is scored.'}
+            </span>
           </div>
           {route === 'ranked' ? <Ranked /> : <Puzzles />}
         </>
       ) : !state ? (
         <section className="lobby">
-          <h2>Play the engine</h2>
-          <p>
-            A neural network trained on games from strong Lichess players,
-            picking each reply by searching a few hundred positions ahead. It
-            plays around 1000 Elo, so it is beatable. Your rating is tracked
-            whether or not you make an account.
-          </p>
+          <div className="pagehead">
+            <h1>Play the engine</h1>
+            <p>
+              BlunderNet is a network trained on Lichess games. It plays around
+              1000, so it is beatable. Your rating moves either way, account or
+              not.
+            </p>
+          </div>
           <div className="choices">
             <button className="choice light" onClick={() => newGame('white')}>
               <span className="seal light">♔</span>
               <span className="label">Play White</span>
-              <span className="sub">Yours is the first move</span>
+              <span className="sub">You open</span>
             </button>
             <button className="choice dark" onClick={() => newGame('black')}>
               <span className="seal dark">♚</span>
               <span className="label">Play Black</span>
-              <span className="sub">The machine opens</span>
+              <span className="sub">It opens</span>
             </button>
           </div>
-          <p className="fineprint">
-            300 simulations per move · policy and value heads · 2.6M parameters
-          </p>
+          {stats && stats.total > 0 && (
+            <dl className="ledger">
+              <div>
+                <dt>Games</dt>
+                <dd>{stats.total}</dd>
+              </div>
+              <div>
+                <dt>Engine</dt>
+                <dd>{stats.engine_wins}</dd>
+              </div>
+              <div>
+                <dt>Players</dt>
+                <dd>{stats.player_wins}</dd>
+              </div>
+              <div>
+                <dt>Draws</dt>
+                <dd>{stats.draws}</dd>
+              </div>
+            </dl>
+          )}
+          <p className="fineprint">300 simulations a move, 2.6M parameters</p>
         </section>
       ) : (
         <main className="game">
@@ -311,8 +316,8 @@ export default function App() {
                 boardOrientation={state.player_color}
                 arePiecesDraggable={state.status === 'ongoing'}
                 customBoardStyle={{ borderRadius: '6px' }}
-                customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
+                customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
+                customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
                 customSquareStyles={squareStyles}
               />
               {result && (

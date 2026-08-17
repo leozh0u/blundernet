@@ -33,14 +33,14 @@ var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
 <title>BlunderNet</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
- body{font:17px/1.6 'IBM Plex Sans',system-ui,sans-serif;background:#262421;color:#f1f1f0;
+ body{font:17px/1.6 'IBM Plex Sans',system-ui,sans-serif;background:#1a1f27;color:#f1f4f8;
       max-width:40rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
  h1{font-size:1.5rem;margin:0 0 .25rem}
  h2{font-size:1.05rem;margin:1.75rem 0 .4rem}
- p,li{color:#b8b5b0;margin:0 0 .6rem}
+ p,li{color:#b4c0cd;margin:0 0 .6rem}
  ul{padding-left:1.2rem}
- a{color:#81b64c}
- .updated{font-size:.94rem;color:#8b8781;margin-bottom:2rem}
+ a{color:#4a90d9}
+ .updated{font-size:.94rem;color:#8593a2;margin-bottom:2rem}
 </style>
 {{.}}
 <p style="margin-top:2.5rem"><a href="/">Back to the site</a></p>
