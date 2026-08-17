@@ -70,6 +70,7 @@ function filterFromURL() {
     ratingMax: Number(q.get('rating_max') || 0),
     phases: (q.get('phase') || '').split(',').filter(Boolean),
     theme: q.get('theme') || '',
+    opening: q.get('opening') || '',
     movesMin: Number(q.get('moves_min') || 0),
     movesMax: Number(q.get('moves_max') || 0),
   }
@@ -81,6 +82,7 @@ function filterToQuery(f) {
   if (f.ratingMax) q.set('rating_max', f.ratingMax)
   if (f.phases.length) q.set('phase', f.phases.join(','))
   if (f.theme) q.set('theme', f.theme)
+  if (f.opening) q.set('opening', f.opening)
   if (f.movesMin) q.set('moves_min', f.movesMin)
   if (f.movesMax) q.set('moves_max', f.movesMax)
   return q
@@ -108,6 +110,7 @@ export default function Puzzles() {
   // out of date.
   const hintsUsed = useRef(0)
   const [saved, setSaved] = useState(false)
+  const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
   const [source, setSource] = useState(
@@ -205,6 +208,15 @@ export default function Puzzles() {
     load(filter)
     // Only on mount and on an explicit filter change, which calls load itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // The opening list is the top forty by size, served from the same summary
+  // the sampler uses, so nothing in the menu can come back empty.
+  useEffect(() => {
+    fetch('/api/puzzles/openings')
+      .then((r) => (r.ok ? r.json() : { openings: [] }))
+      .then((body) => setOpenings(body.openings || []))
+      .catch(() => {})
   }, [])
 
   // Flipping between the search and the wrong-answer list reloads, since they
@@ -545,6 +557,23 @@ export default function Puzzles() {
             {COMMON_THEMES.map((t) => (
               <option key={t} value={t}>
                 {titleCase(t)}
+              </option>
+            ))}
+          </select>
+
+          <span className="filter-label">
+            <label htmlFor="opening">Opening</label>
+          </span>
+          <select
+            id="opening"
+            className="theme-select"
+            value={filter.opening}
+            onChange={(e) => apply({ opening: e.target.value })}
+          >
+            <option value="">Any opening</option>
+            {openings.map((o) => (
+              <option key={o.name} value={o.name}>
+                {o.name.replace(/_/g, ' ')}
               </option>
             ))}
           </select>

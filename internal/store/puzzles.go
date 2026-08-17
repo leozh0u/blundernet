@@ -167,6 +167,17 @@ func (p *Puzzles) RefreshCells(ctx context.Context) error {
 		GROUP BY 1, 2, 3, 4`); err != nil {
 		return err
 	}
+	// Openings share the table under a prefix. They are the same kind of thing
+	// to the sampler, a tag that is a recheck rather than an index column, and
+	// giving them their own table would mean two copies of the cell logic.
+	// The prefix cannot collide: no Lichess theme contains a colon.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO puzzle_cells (theme, rating_band, phase, solution_plies, n)
+		SELECT 'op:' || opening, rating_band, phase, solution_plies, count(*)
+		FROM puzzles, unnest(opening_tags) AS opening
+		GROUP BY 1, 2, 3, 4`); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 

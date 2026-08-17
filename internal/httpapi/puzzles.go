@@ -75,6 +75,7 @@ func (s *Server) handlePuzzleSearch(w http.ResponseWriter, r *http.Request) {
 		MaxRating:     atoiDefault(q.Get("rating_max"), 0),
 		Phases:        splitList(q.Get("phase")),
 		Themes:        splitList(q.Get("theme")),
+		Openings:      splitList(q.Get("opening")),
 		MinPopularity: atoiDefault(q.Get("popularity_min"), 0),
 	}
 	for _, p := range f.Phases {
@@ -216,6 +217,22 @@ func (s *Server) handlePuzzleAttempt(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("mark puzzle seen", "puzzle", id, "err", err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recorded": true})
+}
+
+// handlePuzzleOpenings is the opening menu. Capped at the openings anybody
+// would recognise, since the tail is variations with a few hundred puzzles
+// each and a filter nobody can find is not a filter.
+func (s *Server) handlePuzzleOpenings(w http.ResponseWriter, r *http.Request) {
+	if s.puzzles == nil {
+		httpError(w, http.StatusServiceUnavailable, "puzzles are not configured")
+		return
+	}
+	list, err := s.puzzles.Openings(r.Context(), 40)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"openings": list})
 }
 
 // handlePuzzleFavourite saves or unsaves a puzzle. Saving mints a guest the

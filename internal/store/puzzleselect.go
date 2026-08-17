@@ -18,7 +18,22 @@ type Filter struct {
 	Phases               []string // any of, empty for all
 	MinPlies, MaxPlies   int      // solution length in plies, 0 for unbounded
 	Themes               []string // all of
+	Openings             []string // any of, since a puzzle carries one line
 	MinPopularity        int      // Lichess upvote score, -100 accepts everything
+}
+
+// openingPrefix keeps openings and themes apart inside the one summary table.
+const openingPrefix = "op:"
+
+// tags is every filter the sampler weights cells by. The rarest of them
+// decides which cells can answer at all.
+func (f Filter) tags() []string {
+	out := make([]string, 0, len(f.Themes)+len(f.Openings))
+	out = append(out, f.Themes...)
+	for _, o := range f.Openings {
+		out = append(out, openingPrefix+o)
+	}
+	return out
 }
 
 // cell is one square of the filter grid: an exact rating band, phase and
@@ -155,7 +170,7 @@ func (p *Puzzles) cells(ctx context.Context, f Filter) ([]cell, int64, error) {
 		  AND ($4 = 0 OR solution_plies >= $4)
 		  AND ($5 = 0 OR solution_plies <= $5)`,
 		f.MinRating, f.MaxRating, notNull(f.Phases), f.MinPlies, f.MaxPlies,
-		notNull(f.Themes))
+		notNull(f.tags()))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -189,11 +204,32 @@ type Theme struct {
 // summary the sampler weights cells with, so the menu cannot offer a filter
 // that returns nothing.
 func (p *Puzzles) Themes(ctx context.Context) ([]Theme, error) {
-	rows, err := p.pool.Query(ctx, `
+	return p.tagList(ctx, "theme <> '' AND theme NOT LIKE 'op:%'", 0)
+}
+
+// Openings lists the most common openings. Capped, because there are 1,589 of
+// them and a menu of 1,589 is not a filter, it is a haystack.
+func (p *Puzzles) Openings(ctx context.Context, limit int) ([]Theme, error) {
+	list, err := p.tagList(ctx, "theme LIKE 'op:%'", limit)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].Name = strings.TrimPrefix(list[i].Name, openingPrefix)
+	}
+	return list, nil
+}
+
+func (p *Puzzles) tagList(ctx context.Context, where string, limit int) ([]Theme, error) {
+	q := fmt.Sprintf(`
 		SELECT theme, sum(n) FROM puzzle_cells
-		WHERE theme <> ''
+		WHERE %s
 		GROUP BY theme
-		ORDER BY sum(n) DESC`)
+		ORDER BY sum(n) DESC`, where)
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := p.pool.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -269,13 +305,15 @@ func (p *Puzzles) scan(ctx context.Context, c cell, f Filter, cursorCond, order 
 		  AND %s
 		  AND ($5 = 0 OR rating >= $5) AND ($6 = 0 OR rating <= $6)
 		  AND (cardinality($7::text[]) = 0 OR themes @> $7)
-		  AND popularity >= $8
+		  AND (cardinality($8::text[]) = 0 OR opening_tags && $8)
+		  AND popularity >= $9
 		ORDER BY %s
-		LIMIT $9`, selectColumns, cursorCond, order)
+		LIMIT $10`, selectColumns, cursorCond, order)
 
 	rows, err := p.pool.Query(ctx, q,
 		c.band, c.phase, c.plies, cursor,
-		f.MinRating, f.MaxRating, notNull(f.Themes), f.MinPopularity, limit)
+		f.MinRating, f.MaxRating, notNull(f.Themes), notNull(f.Openings),
+		f.MinPopularity, limit)
 	if err != nil {
 		return nil, err
 	}
