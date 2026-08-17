@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { auth, displayRating } from './auth.js'
+import { auth } from './auth.js'
 
 // The account strip. Everything on the site works signed out, so this never
-// blocks anything: it reports the rating you already have and offers to make
-// it permanent.
+// blocks anything: it names you, links to the page where the numbers are, and
+// offers to make the account permanent.
+//
+// The rating used to live here as a bare number, which raised the question it
+// could not answer once there were two of them. It moved to the account page,
+// where each one is labelled with what moves it.
 export default function Account({ refreshKey }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -33,7 +37,6 @@ export default function Account({ refreshKey }) {
     return () => window.removeEventListener('blundernet:auth', open)
   }, [])
 
-  const rating = displayRating(profile)
   const isGuest = !user || user.guest
 
   // Reserve the space before the numbers arrive, so the strip does not jump
@@ -41,7 +44,6 @@ export default function Account({ refreshKey }) {
   if (!loaded) {
     return (
       <div className="account">
-        <span className="skeleton skel-rating" aria-hidden="true" />
         <span className="skeleton skel-name" aria-hidden="true" />
         <span className="visually-hidden">Loading your account</span>
       </div>
@@ -50,16 +52,11 @@ export default function Account({ refreshKey }) {
 
   return (
     <div className="account">
-      {rating !== null && (
-        <span className="rating" title={profile.provisional ? 'Provisional until five rated games' : ''}>
-          {rating}
-          {profile.provisional && <i className="prov">?</i>}
-        </span>
-      )}
-
       {isGuest ? (
         <>
-          <span className="whoami">Playing as guest</span>
+          <a className="whoami" href="/me">
+            Guest
+          </a>
           <button className="link" onClick={() => setForm('signup')}>
             Keep my progress
           </button>
@@ -69,7 +66,9 @@ export default function Account({ refreshKey }) {
         </>
       ) : (
         <>
-          <span className="whoami">{user.username}</span>
+          <a className="whoami" href="/me">
+            {user.username}
+          </a>
           <button
             className="link quiet"
             onClick={async () => {

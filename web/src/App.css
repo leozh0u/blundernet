@@ -1105,3 +1105,112 @@ button {
   font-weight: 400;
   color: var(--ink-faint);
 }
+
+/* Saving a puzzle. The star sits in the panel header rather than with the
+   actions, because it is a property of the puzzle rather than a thing to do
+   next, and it stays available whether you are solving or done. */
+.record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 0.25rem;
+}
+
+.record-head h3 {
+  padding-bottom: 0;
+}
+
+.star {
+  padding: 0.2rem 0.5rem;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.star:hover {
+  color: var(--ink);
+}
+
+.star.on {
+  color: var(--blue);
+}
+
+/* Account page. Three cards for the three things the site keeps about you,
+   each with the sentence that says what moves the numbers. */
+.profile .note {
+  margin-bottom: 1rem;
+  color: var(--ink-soft);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.card {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.cards .card {
+  margin-top: 0;
+}
+
+.card h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.card .meta {
+  padding: 0;
+}
+
+.card .explains {
+  margin-top: 0.6rem;
+  font-size: 0.94rem;
+  color: var(--ink-faint);
+}
+
+.card .after {
+  margin-top: 0.8rem;
+}
+
+.history {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.history td {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.history td:first-child {
+  color: var(--ink);
+}
+
+.history .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.whoami {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.whoami:hover {
+  text-decoration: underline;
+}

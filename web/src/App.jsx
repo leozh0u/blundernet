@@ -5,6 +5,7 @@ import SearchTree from './SearchTree.jsx'
 import Account from './Account.jsx'
 import Puzzles from './Puzzles.jsx'
 import Ranked from './Ranked.jsx'
+import Profile from './Profile.jsx'
 
 const api = {
   async createGame(color, mode, level) {
@@ -86,10 +87,11 @@ function outcome(state) {
 function routeOf(path) {
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
   if (path.startsWith('/play')) return 'play'
+  if (path.startsWith('/me')) return 'me'
   return 'puzzles'
 }
 
-const PATHS = { puzzles: '/', ranked: '/puzzles/ranked', play: '/play' }
+const PATHS = { puzzles: '/', ranked: '/puzzles/ranked', play: '/play', me: '/me' }
 
 export default function App() {
   const [route, setRoute] = useState(() => routeOf(window.location.pathname))
@@ -263,7 +265,14 @@ export default function App() {
         <Account refreshKey={ratingKey} />
       </header>
 
-      {route !== 'play' ? (
+      {route === 'me' ? (
+        <Profile
+          onDrill={(list) => {
+            window.history.pushState({}, '', `/?drill=${list}`)
+            setRoute('puzzles')
+          }}
+        />
+      ) : route !== 'play' ? (
         <>
           <div className="pagehead">
             <h1>Puzzles</h1>

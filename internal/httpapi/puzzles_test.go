@@ -397,3 +397,65 @@ func TestFailedPuzzlesDrillList(t *testing.T) {
 		t.Errorf("solving it should clear it, got %+v", after.Puzzles)
 	}
 }
+
+// Saving is a toggle, it survives into the search results, and the saved list
+// is what the account page counts.
+func TestFavouritePuzzles(t *testing.T) {
+	s := newPuzzleServer(t)
+
+	rec := do(t, s, "POST", "/api/puzzles/fork05/favourite", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body)
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("saving should mint a session for a signed out visitor")
+	}
+
+	rec = asUser(s, cookies, "GET", "/api/puzzles/favourites", "")
+	var list searchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Puzzles) != 1 || list.Puzzles[0].ID != "fork05" || !list.Puzzles[0].Saved {
+		t.Fatalf("saved list = %+v", list.Puzzles)
+	}
+
+	// A search result says whether it is saved, so the star arrives filled in.
+	rec = asUser(s, cookies, "GET", "/api/puzzles?theme=fork&limit=20", "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range list.Puzzles {
+		if p.ID == "fork05" && !p.Saved {
+			t.Error("a saved puzzle came back from search unmarked")
+		}
+	}
+
+	// Saving twice is not an error, and unsaving empties the list.
+	if rec := asUser(s, cookies, "POST", "/api/puzzles/fork05/favourite", ""); rec.Code != http.StatusOK {
+		t.Errorf("saving twice: %d %s", rec.Code, rec.Body)
+	}
+	if rec := asUser(s, cookies, "DELETE", "/api/puzzles/fork05/favourite", ""); rec.Code != http.StatusOK {
+		t.Errorf("unsave: %d %s", rec.Code, rec.Body)
+	}
+	rec = asUser(s, cookies, "GET", "/api/puzzles/favourites", "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Puzzles) != 0 {
+		t.Errorf("unsaved puzzle is still listed: %+v", list.Puzzles)
+	}
+}
+
+func TestFavouritesAreEmptyWhenSignedOut(t *testing.T) {
+	s := newPuzzleServer(t)
+	rec := do(t, s, "GET", "/api/puzzles/favourites", "")
+	var list searchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || len(list.Puzzles) != 0 {
+		t.Fatalf("got %d %s", rec.Code, rec.Body)
+	}
+}

@@ -98,7 +98,12 @@ export default function Puzzles() {
   const [phase, setPhase] = useState('loading') // loading, solving, solved, failed, empty
   const [selected, setSelected] = useState(null)
   const [hints, setHints] = useState(0)
-  const [wrongOnly, setWrongOnly] = useState(false)
+  const [saved, setSaved] = useState(false)
+  // 'search' is the corpus, the other two are your own lists. The account
+  // page links straight into one of them, so the choice comes from the URL.
+  const [source, setSource] = useState(
+    () => new URLSearchParams(window.location.search).get('drill') || 'search',
+  )
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
@@ -121,8 +126,9 @@ export default function Puzzles() {
   // instead of pretending to combine with it.
   const fetchBatch = useCallback(
     async (f) => {
-      if (wrongOnly) {
-        const res = await fetch('/api/puzzles/failed?limit=10')
+      if (source !== 'search') {
+        const path = source === 'wrong' ? 'failed' : 'favourites'
+        const res = await fetch(`/api/puzzles/${path}?limit=10`)
         if (!res.ok) throw new Error('That list could not be loaded. Try again.')
         return (await res.json()).puzzles || []
       }
@@ -133,7 +139,7 @@ export default function Puzzles() {
       const body = await res.json()
       return body.puzzles || []
     },
-    [wrongOnly],
+    [source],
   )
 
   // Show a puzzle: set the position before the blunder, then play the blunder
@@ -145,6 +151,7 @@ export default function Puzzles() {
       setStep(0)
       setSelected(null)
       setHints(0)
+      setSaved(!!p.saved)
       setPhase('setup')
       const before = new Chess(p.fen)
       setBoard(before)
@@ -200,7 +207,7 @@ export default function Puzzles() {
     }
     load(filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wrongOnly])
+  }, [source])
 
   const next = useCallback(async () => {
     if (queue.length > 0) {
@@ -217,6 +224,19 @@ export default function Puzzles() {
     }
     await load(filter)
   }, [queue, filter, present, load, fetchBatch])
+
+  // Saving is a toggle, and the star flips before the request lands. If the
+  // write fails the star goes back, which is a better trade than making
+  // somebody wait on a round trip to see a star fill in.
+  const toggleSave = async () => {
+    if (!puzzle) return
+    const next = !saved
+    setSaved(next)
+    const res = await fetch(`/api/puzzles/${puzzle.id}/favourite`, {
+      method: next ? 'POST' : 'DELETE',
+    })
+    if (!res.ok) setSaved(!next)
+  }
 
   const record = useCallback((id, solved, hints) => {
     fetch(`/api/puzzles/${id}/attempt`, {
@@ -434,20 +454,26 @@ export default function Puzzles() {
           <span className="filter-label">Drill</span>
           <div className="chips">
             <button
-              className={`chip ${!wrongOnly ? 'on' : ''}`}
-              onClick={() => setWrongOnly(false)}
+              className={`chip ${source === 'search' ? 'on' : ''}`}
+              onClick={() => setSource('search')}
             >
               Search
             </button>
             <button
-              className={`chip ${wrongOnly ? 'on' : ''}`}
-              onClick={() => setWrongOnly(true)}
+              className={`chip ${source === 'wrong' ? 'on' : ''}`}
+              onClick={() => setSource('wrong')}
             >
               Ones I got wrong
             </button>
+            <button
+              className={`chip ${source === 'saved' ? 'on' : ''}`}
+              onClick={() => setSource('saved')}
+            >
+              Saved
+            </button>
           </div>
         </div>
-        <div className="filter-row" data-hidden={wrongOnly || undefined}>
+        <div className="filter-row" data-hidden={source !== 'search' || undefined}>
           <span className="filter-label">Rating</span>
           <div className="chips">
             {RATING_BANDS.map((b) => (
@@ -462,7 +488,7 @@ export default function Puzzles() {
           </div>
         </div>
 
-        <div className="filter-row" data-hidden={wrongOnly || undefined}>
+        <div className="filter-row" data-hidden={source !== 'search' || undefined}>
           <span className="filter-label">Length</span>
           <div className="chips">
             <button
@@ -483,7 +509,7 @@ export default function Puzzles() {
           </div>
         </div>
 
-        <div className="filter-row" data-hidden={wrongOnly || undefined}>
+        <div className="filter-row" data-hidden={source !== 'search' || undefined}>
           <span className="filter-label">Phase</span>
           <div className="chips">
             {PHASES.map((p) => (
@@ -498,7 +524,7 @@ export default function Puzzles() {
           </div>
         </div>
 
-        <div className="filter-row" data-hidden={wrongOnly || undefined}>
+        <div className="filter-row" data-hidden={source !== 'search' || undefined}>
           <span className="filter-label">
             <label htmlFor="theme">Theme</label>
           </span>
@@ -520,12 +546,16 @@ export default function Puzzles() {
 
       {phase === 'empty' ? (
         <section className="puzzle-empty">
-          <h2>{wrongOnly ? 'Nothing to redo' : 'Nothing matches that'}</h2>
+          <h2>
+            {source === 'search' ? 'Nothing matches that' : 'Nothing here yet'}
+          </h2>
           <p>
             {error ||
-              (wrongOnly
-                ? 'Nothing here yet. Puzzles you get wrong land in this list, and leave it once you get them right.'
-                : 'No puzzle has all of those at once. Widen the rating, or drop the theme.')}
+              (source === 'search'
+                ? 'No puzzle has all of those at once. Widen the rating, or drop the theme.'
+                : source === 'wrong'
+                  ? 'Puzzles you get wrong land here, and leave once you get them right.'
+                  : 'Save a puzzle with the star and it waits here for you.')}
           </p>
         </section>
       ) : (
@@ -564,7 +594,17 @@ export default function Puzzles() {
 
             {puzzle && (
               <div className="record">
-                <h3>This puzzle</h3>
+                <div className="record-head">
+                  <h3>This puzzle</h3>
+                  <button
+                    className={`star ${saved ? 'on' : ''}`}
+                    onClick={toggleSave}
+                    title={saved ? 'Saved' : 'Save this puzzle'}
+                    aria-label={saved ? 'Saved' : 'Save this puzzle'}
+                  >
+                    {saved ? '★' : '☆'}
+                  </button>
+                </div>
                 <dl className="meta">
                   <div>
                     <dt>Rating</dt>

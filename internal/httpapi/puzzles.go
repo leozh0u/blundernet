@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -31,6 +32,7 @@ type puzzleView struct {
 	Themes      []string            `json:"themes"`
 	GameURL     string              `json:"game_url,omitempty"`
 	Explanation *puzzle.Explanation `json:"explanation,omitempty"`
+	Saved       bool                `json:"saved"`
 }
 
 func toPuzzleView(p puzzle.Puzzle, withSolution bool) puzzleView {
@@ -123,11 +125,26 @@ func (s *Server) handlePuzzleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	saved, err := s.puzzles.FavouriteSet(r.Context(), userID(r))
+	if err != nil {
+		internalError(w, err)
+		return
+	}
 	out := make([]puzzleView, 0, len(found))
 	for _, p := range found {
-		out = append(out, toPuzzleView(p, true))
+		v := toPuzzleView(p, true)
+		v.Saved = saved[p.ID]
+		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"puzzles": out})
+}
+
+// userID is the caller's id, or empty when signed out.
+func userID(r *http.Request) string {
+	if u := UserFrom(r.Context()); u != nil {
+		return u.ID
+	}
+	return ""
 }
 
 func (s *Server) handlePuzzleByID(w http.ResponseWriter, r *http.Request) {
@@ -201,18 +218,79 @@ func (s *Server) handlePuzzleAttempt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"recorded": true})
 }
 
+// handlePuzzleFavourite saves or unsaves a puzzle. Saving mints a guest the
+// same way an attempt does: a list you have to sign up to keep is a list
+// nobody starts.
+func (s *Server) handlePuzzleFavourite(w http.ResponseWriter, r *http.Request) {
+	if s.puzzles == nil {
+		httpError(w, http.StatusServiceUnavailable, "puzzles are not configured")
+		return
+	}
+	id := r.PathValue("id")
+	if _, ok, err := s.puzzles.ByID(r.Context(), id); err != nil {
+		internalError(w, err)
+		return
+	} else if !ok {
+		httpError(w, http.StatusNotFound, "no such puzzle")
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		user := UserFrom(r.Context())
+		if user == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"saved": false})
+			return
+		}
+		if err := s.puzzles.Unfavourite(r.Context(), user.ID, id); err != nil {
+			internalError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"saved": false})
+		return
+	}
+
+	user, err := s.ensureIdentity(w, r)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	if user == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return
+	}
+	if err := s.puzzles.Favourite(r.Context(), user.ID, id); err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+// handlePuzzleFavourites is the saved list, drilled the same way as any other.
+func (s *Server) handlePuzzleFavourites(w http.ResponseWriter, r *http.Request) {
+	s.serveList(w, r, func(ctx context.Context, userID string, limit int) ([]string, error) {
+		return s.puzzles.FavouriteIDs(ctx, userID, limit)
+	})
+}
+
 // handlePuzzleFailed is the drill list: the puzzles you got wrong and have not
 // since got right. This is the part that makes the site worth a second visit,
 // and it is why attempts are rows rather than a counter.
 func (s *Server) handlePuzzleFailed(w http.ResponseWriter, r *http.Request) {
+	s.serveList(w, r, s.puzzles.Failed)
+}
+
+// serveList is the shape both personal lists share: ask the table for ids,
+// load the puzzles behind them, and answer an empty list rather than an error
+// when nobody is signed in, because a visitor with no history is not a
+// failure.
+func (s *Server) serveList(w http.ResponseWriter, r *http.Request,
+	ids func(ctx context.Context, userID string, limit int) ([]string, error)) {
 	if s.puzzles == nil {
 		httpError(w, http.StatusServiceUnavailable, "puzzles are not configured")
 		return
 	}
 	user := UserFrom(r.Context())
 	if user == nil {
-		// Nobody has failed anything yet, which is not an error. A signed out
-		// visitor has no history because there is nothing to attach it to.
 		writeJSON(w, http.StatusOK, map[string]any{"puzzles": []puzzleView{}})
 		return
 	}
@@ -223,19 +301,26 @@ func (s *Server) handlePuzzleFailed(w http.ResponseWriter, r *http.Request) {
 	if limit > maxBatch {
 		limit = maxBatch
 	}
-	ids, err := s.puzzles.Failed(r.Context(), user.ID, limit)
+	list, err := ids(r.Context(), user.ID, limit)
 	if err != nil {
 		internalError(w, err)
 		return
 	}
-	found, err := s.puzzles.ByIDs(r.Context(), ids)
+	found, err := s.puzzles.ByIDs(r.Context(), list)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	saved, err := s.puzzles.FavouriteSet(r.Context(), user.ID)
 	if err != nil {
 		internalError(w, err)
 		return
 	}
 	out := make([]puzzleView, 0, len(found))
 	for _, p := range found {
-		out = append(out, toPuzzleView(p, true))
+		v := toPuzzleView(p, true)
+		v.Saved = saved[p.ID]
+		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"puzzles": out})
 }
