@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"os"
 	"strconv"
 
@@ -98,7 +99,19 @@ func terminalValue(pos *chess.Position) (float64, bool) {
 	return 0, false
 }
 
+// BestMove searches at the strength this engine was built with.
 func (m *MCTS) BestMove(fen string) (string, error) {
+	return m.search(fen, m.sims, 0)
+}
+
+// BestMoveAt searches at a requested level, which is how one worker serves
+// bots of different strengths without holding one engine per level.
+func (m *MCTS) BestMoveAt(fen string, level int) (string, error) {
+	cfg := Settings(level)
+	return m.search(fen, cfg.Sims, cfg.Temp)
+}
+
+func (m *MCTS) search(fen string, sims int, temp float64) (string, error) {
 	root := &node{}
 	rootPos, err := ParseFEN(fen)
 	if err != nil {
@@ -121,7 +134,7 @@ func (m *MCTS) BestMove(fen string) (string, error) {
 		return "", err
 	}
 
-	for s := 0; s < m.sims; s++ {
+	for s := 0; s < sims; s++ {
 		n, pos := root, rootPos
 		path := []*node{}
 
@@ -158,14 +171,39 @@ func (m *MCTS) BestMove(fen string) (string, error) {
 		}
 	}
 
-	// Most-visited root move.
-	bestIdx := 0
-	for i, child := range root.children {
-		if child.visits > root.children[bestIdx].visits {
-			bestIdx = i
+	return IndexUCI(MoveIndex(root.moves[pickRoot(root, temp)]), rootPos), nil
+}
+
+// pickRoot is the most-visited move at temperature zero, and a sample from
+// visits^(1/T) above it.
+func pickRoot(root *node, temp float64) int {
+	if temp <= 0 {
+		best := 0
+		for i, child := range root.children {
+			if child.visits > root.children[best].visits {
+				best = i
+			}
 		}
+		return best
 	}
-	return IndexUCI(MoveIndex(root.moves[bestIdx]), rootPos), nil
+
+	weights := make([]float64, len(root.children))
+	total := 0.0
+	for i, child := range root.children {
+		// The +1 keeps a move the search never visited in play with a small
+		// weight, which is what a weak player looking at few moves does.
+		w := math.Pow(float64(child.visits)+1, 1/temp)
+		weights[i] = w
+		total += w
+	}
+	r := rand.Float64() * total
+	for i, w := range weights {
+		if r < w {
+			return i
+		}
+		r -= w
+	}
+	return len(root.children) - 1
 }
 
 // SimsFromEnv reads ENGINE_SIMS, defaulting to 300. Values below 2 mean

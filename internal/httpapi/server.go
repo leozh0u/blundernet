@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/leozh0u/blundernet/internal/engine"
 	"github.com/leozh0u/blundernet/internal/game"
 	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
@@ -105,6 +106,7 @@ func New(d Deps) *Server {
 	mux.HandleFunc("POST /api/games", s.limit("create", s.limits.CreateGame, s.handleCreate))
 	mux.HandleFunc("GET /api/games/{id}", s.handleGet)
 	mux.HandleFunc("POST /api/games/{id}/moves", s.limit("move", s.limits.Move, s.handleMove))
+	mux.HandleFunc("POST /api/games/{id}/hint", s.limit("move", s.limits.Move, s.handleHint))
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
 	mux.HandleFunc("GET /api/puzzles", s.limit("puzzles", s.limits.Puzzles, s.handlePuzzleSearch))
@@ -142,6 +144,8 @@ type State struct {
 	Moves       []string `json:"moves"`
 	Turn        string   `json:"turn"`
 	PlayerColor string   `json:"player_color"`
+	Level       int      `json:"level"`
+	Rated       bool     `json:"rated"`
 	Status      string   `json:"status"`
 	Result      string   `json:"result,omitempty"`
 	Termination string   `json:"termination,omitempty"`
@@ -150,7 +154,8 @@ type State struct {
 func ToState(g *game.Game) State {
 	return State{
 		Type: "state", ID: g.ID, FEN: g.FEN(), Moves: g.Moves, Turn: g.Turn(),
-		PlayerColor: g.PlayerColor, Status: string(g.Status),
+		PlayerColor: g.PlayerColor, Level: g.Level, Rated: g.Rated,
+		Status: string(g.Status),
 		Result: g.Result, Termination: g.Termination,
 	}
 }
@@ -172,6 +177,12 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Color string `json:"color"`
+		// "rated" puts the ladder in charge of the level and lets the result
+		// move both the ladder and the rating. "learning" is a practice game:
+		// you pick the level, hints are available, nothing is recorded
+		// against you.
+		Mode  string `json:"mode"`
+		Level int    `json:"level"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.Color == "" {
@@ -181,7 +192,14 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "color must be white or black")
 		return
 	}
-	g := game.New(uuid.NewString(), req.Color)
+	if req.Mode == "" {
+		req.Mode = game.ModeRated
+	}
+	if req.Mode != game.ModeRated && req.Mode != game.ModeLearning {
+		httpError(w, http.StatusBadRequest, "mode must be rated or learning")
+		return
+	}
+
 	// Attached at creation, not at archival, because the worker writes the
 	// archive for games ending in checkmate and has no session to ask. A
 	// first-time visitor gets a guest account here rather than a prompt, so
@@ -193,6 +211,22 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
+
+	rated := req.Mode == game.ModeRated
+	level := req.Level
+	if rated {
+		// The ladder decides, not the request. A level you can name in a
+		// rated game is a rating you can farm.
+		level = engine.DefaultLevel
+		if user != nil && s.users != nil {
+			if n, err := s.users.BotLevel(r.Context(), user.ID); err == nil {
+				level = n
+			} else {
+				slog.Error("read bot level", "user", user.ID, "err", err)
+			}
+		}
+	}
+	g := game.New(uuid.NewString(), req.Color, level, rated)
 	if user != nil {
 		g.UserID = user.ID
 	}
@@ -209,6 +243,36 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusCreated, ToState(g))
+}
+
+// handleHint asks a worker what the player should play. Learning games only:
+// a hint in a rated game is somebody else's move on your rating.
+//
+// The answer comes back over the same WebSocket the game already uses rather
+// than in this response, because the search takes about as long as an engine
+// move and holding an HTTP request open for it puts inference back on the
+// request path, which is the one thing the queue exists to prevent.
+func (s *Server) handleHint(w http.ResponseWriter, r *http.Request) {
+	g, err := s.games.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		gameError(w, err)
+		return
+	}
+	if g.Rated {
+		httpError(w, http.StatusForbidden, "hints are for learning games")
+		return
+	}
+	if g.Status != game.StatusOngoing || g.Turn() != g.PlayerColor {
+		httpError(w, http.StatusConflict, "not your move")
+		return
+	}
+	if err := s.jobs.Enqueue(r.Context(), queue.Job{
+		GameID: g.ID, Ply: g.Ply, Kind: queue.KindHint,
+	}); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,13 @@ import (
 	"github.com/notnil/chess"
 )
 
+// Modes a game can be played in. Rated games move the ladder and the rating;
+// learning games move neither and allow hints.
+const (
+	ModeRated    = "rated"
+	ModeLearning = "learning"
+)
+
 type Status string
 
 const (
@@ -35,7 +42,12 @@ type Game struct {
 	// Empty for anonymous games, which stay supported. The id travels with
 	// the game through Redis because the archive write happens in the worker,
 	// which has no session and no way to ask who started this.
-	UserID      string    `json:"user_id,omitempty"`
+	UserID string `json:"user_id,omitempty"`
+	// The bot's strength for this game, and whether the result moves ratings.
+	// Both travel with the game because the worker picks the move and the
+	// archive write happens there too, with no session to ask.
+	Level       int       `json:"level"`
+	Rated       bool      `json:"rated"`
 	Status      Status    `json:"status"`
 	Result      string    `json:"result"`      // "1-0", "0-1", "1/2-1/2", ""
 	Termination string    `json:"termination"` // "checkmate", "stalemate", "resignation", ...
@@ -43,12 +55,14 @@ type Game struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-func New(id, playerColor string) *Game {
+func New(id, playerColor string, level int, rated bool) *Game {
 	now := time.Now().UTC()
 	return &Game{
 		ID:          id,
 		Moves:       []string{},
 		PlayerColor: playerColor,
+		Level:       level,
+		Rated:       rated,
 		Status:      StatusOngoing,
 		CreatedAt:   now,
 		UpdatedAt:   now,

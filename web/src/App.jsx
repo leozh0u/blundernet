@@ -7,14 +7,21 @@ import Puzzles from './Puzzles.jsx'
 import Ranked from './Ranked.jsx'
 
 const api = {
-  async createGame(color) {
+  async createGame(color, mode, level) {
     const res = await fetch('/api/games', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ color }),
+      body: JSON.stringify({ color, mode, level }),
     })
-    if (!res.ok) throw new Error('The cabinet would not open. Try again.')
+    if (!res.ok) throw new Error('The game would not start. Try again.')
     return res.json()
+  },
+  async hint(id) {
+    await fetch(`/api/games/${id}/hint`, { method: 'POST' })
+  },
+  async profile() {
+    const res = await fetch('/api/me/profile')
+    return res.ok ? res.json() : null
   },
   async move(id, uci) {
     const res = await fetch(`/api/games/${id}/moves`, {
@@ -93,10 +100,19 @@ export default function App() {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
+  // Learning or rated, and the level the learning game is played at. Rated
+  // games take the level from the ladder, so the picker is hidden there.
+  const [mode, setMode] = useState('rated')
+  const [level, setLevel] = useState(3)
+  const [ladder, setLadder] = useState(null)
+  const [hint, setHint] = useState(null)
   const wsRef = useRef(null)
 
   useEffect(() => {
     api.stats().then(setStats).catch(() => {})
+    api.profile()
+      .then((p) => p && setLadder(p.bot_level))
+      .catch(() => {})
   }, [state?.status])
 
   useEffect(() => () => wsRef.current?.close(), [])
@@ -117,6 +133,13 @@ export default function App() {
     const ws = new WebSocket(wsURL(id))
     ws.onmessage = (ev) => {
       const next = JSON.parse(ev.data)
+      // A hint is an answer to a question, not a new position. It arrives on
+      // the same socket because the search takes as long as an engine move.
+      if (next.type === 'hint') {
+        setHint({ from: next.uci.slice(0, 2), to: next.uci.slice(2, 4) })
+        return
+      }
+      setHint(null)
       setState((prev) => {
         if (next.status === 'finished' && prev?.status !== 'finished') {
           // The rating is written by whichever service archives the game, so
@@ -133,8 +156,9 @@ export default function App() {
   const newGame = async (color) => {
     setError('')
     setSelected(null)
+    setHint(null)
     try {
-      const st = await api.createGame(color)
+      const st = await api.createGame(color, mode, level)
       setState(st)
       connect(st.id)
     } catch (e) {
@@ -191,6 +215,10 @@ export default function App() {
         styles[sq] = { background: 'rgba(246, 200, 92, 0.45)' }
       }
     }
+    if (hint) {
+      styles[hint.from] = { background: 'rgba(74, 144, 217, 0.55)' }
+      styles[hint.to] = { background: 'rgba(74, 144, 217, 0.35)' }
+    }
     if (selected) {
       styles[selected] = { background: 'rgba(246, 200, 92, 0.6)' }
     }
@@ -202,7 +230,7 @@ export default function App() {
       }
     }
     return styles
-  }, [selected, legalTargets, state])
+  }, [selected, legalTargets, state, hint])
 
   const result = state ? outcome(state) : null
   const pairs = state ? movePairs(state.moves) : []
@@ -256,12 +284,51 @@ export default function App() {
       ) : !state ? (
         <section className="lobby">
           <div className="pagehead">
-            <h1>Play the engine</h1>
-            <p>
-              BlunderNet is a network trained on Lichess games. It plays around
-              1000, so it is beatable. Your rating moves either way, account or
-              not.
-            </p>
+            <h1>Play the bot</h1>
+          </div>
+          <div className="modes" role="tablist">
+            <button
+              role="tab"
+              aria-selected={mode === 'learning'}
+              className={mode === 'learning' ? 'on' : ''}
+              onClick={() => setMode('learning')}
+            >
+              Learning
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === 'rated'}
+              className={mode === 'rated' ? 'on' : ''}
+              onClick={() => setMode('rated')}
+            >
+              Rated
+            </button>
+          </div>
+
+          <div className="levels">
+            {mode === 'learning' ? (
+              <>
+                <span className="filter-label">Level</span>
+                <div className="chips">
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <button
+                      key={n}
+                      className={`chip ${level === n ? 'on' : ''}`}
+                      onClick={() => setLevel(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="filter-label">Level</span>
+                <span className="ladder">
+                  {ladder || 3} <i>moves with your results</i>
+                </span>
+              </>
+            )}
           </div>
           <div className="choices">
             <button className="choice light" onClick={() => newGame('white')}>
@@ -293,7 +360,6 @@ export default function App() {
               </div>
             </dl>
           )}
-          <p className="fineprint">300 simulations a move, 2.6M parameters</p>
         </section>
       ) : (
         <main className="game">
@@ -317,7 +383,7 @@ export default function App() {
                     <h2>{result.title}</h2>
                     <p className="cause">{state.termination}</p>
                     <div className="again">
-                      <button onClick={() => newGame('white')}>Play again as White</button>
+                      <button onClick={() => newGame('white')}>Again as White</button>
                       <button className="ghost" onClick={() => newGame('black')}>
                         as Black
                       </button>
@@ -360,9 +426,20 @@ export default function App() {
             </div>
 
             {state.status === 'ongoing' && (
-              <button className="ghost wide" onClick={() => api.resign(state.id)}>
-                Concede
-              </button>
+              <div className="during">
+                {!state.rated && (
+                  <button
+                    className="wide"
+                    disabled={!myTurn}
+                    onClick={() => api.hint(state.id)}
+                  >
+                    Hint
+                  </button>
+                )}
+                <button className="ghost wide" onClick={() => api.resign(state.id)}>
+                  Resign
+                </button>
+              </div>
             )}
           </aside>
         </main>

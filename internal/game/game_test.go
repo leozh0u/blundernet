@@ -6,7 +6,7 @@ import (
 )
 
 func TestApplyMoveAndTurns(t *testing.T) {
-	g := New("g1", "white")
+	g := New("g1", "white", 4, true)
 	if err := g.ApplyMove("white", "e2e4"); err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestApplyMoveAndTurns(t *testing.T) {
 }
 
 func TestFoolsMateEndsGame(t *testing.T) {
-	g := New("g2", "black")
+	g := New("g2", "black", 4, true)
 	moves := []struct{ color, uci string }{
 		{"white", "f2f3"}, {"black", "e7e5"},
 		{"white", "g2g4"}, {"black", "d8h4"},
@@ -41,7 +41,7 @@ func TestFoolsMateEndsGame(t *testing.T) {
 }
 
 func TestResign(t *testing.T) {
-	g := New("g3", "white")
+	g := New("g3", "white", 4, true)
 	if err := g.Resign("white"); err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestResign(t *testing.T) {
 }
 
 func TestFENStartAndAfterMove(t *testing.T) {
-	g := New("g4", "white")
+	g := New("g4", "white", 4, true)
 	want := "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 	if g.FEN() != want {
 		t.Fatalf("start FEN = %q", g.FEN())

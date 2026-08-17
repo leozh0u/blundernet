@@ -10,16 +10,39 @@ import (
 	"github.com/leozh0u/blundernet/internal/rating"
 )
 
-// The engine is a fixed-strength opponent, so it does not carry a Glicko
-// state of its own. Its rating comes from the Stockfish-anchored estimate in
-// the engine repo, and the deviation is low because that estimate is measured
-// daily rather than guessed. Both need revisiting whenever a new model ships,
-// since a stronger engine rated at the old number inflates everyone who beats
-// it.
+// The bot does not carry a Glicko state of its own, so each level needs a
+// number to be rated against.
+//
+// Only one of these is measured. Level 5 is the 300-simulation configuration
+// the engine repo evaluates against Stockfish daily, and 1000 is that
+// estimate. The rest are an assumption: 120 points a rung, which is the usual
+// spacing on a bot ladder and nothing more principled than that.
+//
+// The deviation is where that gets said out loud. The measured level gets 50,
+// the assumed ones get 150, so a result against a level nobody has calibrated
+// moves the player's rating less than a result against the one that is.
+// Glicko-2 already knows how to handle an opponent whose strength is
+// uncertain; this is just telling it the truth.
 const (
-	EngineRating    = 1000
-	EngineDeviation = 50
+	measuredLevel     = 5
+	measuredRating    = 1000
+	pointsPerLevel    = 120
+	measuredDeviation = 50
+	assumedDeviation  = 150
 )
+
+// EngineRating is the rating assigned to a bot level.
+func EngineRating(level int) float64 {
+	return measuredRating + float64(level-measuredLevel)*pointsPerLevel
+}
+
+// EngineDeviation is how sure that number is.
+func EngineDeviation(level int) float64 {
+	if level == measuredLevel {
+		return measuredDeviation
+	}
+	return assumedDeviation
+}
 
 // scoreFor converts a game result into the player's score. Returns false when
 // the game was not decided, which is nothing to rate.
@@ -59,11 +82,13 @@ func (a *Archive) SaveFinished(ctx context.Context, g *game.Game) error {
 	defer tx.Rollback(ctx)
 
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO games (id, player_color, result, termination, moves, ply, created_at, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO games (id, player_color, result, termination, moves, ply,
+		                   created_at, user_id, bot_level, rated)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO NOTHING`,
 		g.ID, g.PlayerColor, g.Result, g.Termination,
-		joinMoves(g.Moves), g.Ply, g.CreatedAt, nullableUUID(g.UserID))
+		joinMoves(g.Moves), g.Ply, g.CreatedAt, nullableUUID(g.UserID),
+		g.Level, g.Rated)
 	if err != nil {
 		return err
 	}
@@ -73,10 +98,13 @@ func (a *Archive) SaveFinished(ctx context.Context, g *game.Game) error {
 		return tx.Commit(ctx)
 	}
 
-	if g.UserID != "" {
-		score, rated := scoreFor(g)
-		if rated {
-			if err := applyRating(ctx, tx, g.UserID, score); err != nil {
+	if g.UserID != "" && g.Rated {
+		score, decided := scoreFor(g)
+		if decided {
+			if err := applyRating(ctx, tx, g.UserID, score, g.Level); err != nil {
+				return err
+			}
+			if err := moveLadder(ctx, tx, g.UserID, score); err != nil {
 				return err
 			}
 		}
@@ -88,7 +116,7 @@ func (a *Archive) SaveFinished(ctx context.Context, g *game.Game) error {
 // writes it back. The row is locked for the duration: a player finishing two
 // games at once would otherwise have both updates read the same starting
 // rating and one of them would be lost.
-func applyRating(ctx context.Context, tx pgx.Tx, userID string, score float64) error {
+func applyRating(ctx context.Context, tx pgx.Tx, userID string, score float64, level int) error {
 	var p rating.Player
 	err := tx.QueryRow(ctx, `
 		SELECT rating, rating_deviation, rating_volatility
@@ -105,8 +133,8 @@ func applyRating(ctx context.Context, tx pgx.Tx, userID string, score float64) e
 	}
 
 	updated := rating.Update(p, []rating.Result{{
-		OpponentRating:    EngineRating,
-		OpponentDeviation: EngineDeviation,
+		OpponentRating:    EngineRating(level),
+		OpponentDeviation: EngineDeviation(level),
 		Score:             score,
 	}})
 
@@ -119,6 +147,32 @@ func applyRating(ctx context.Context, tx pgx.Tx, userID string, score float64) e
 	return err
 }
 
+// moveLadder steps the bot level after a rated game: up on a win, down on a
+// loss, unchanged on a draw.
+//
+// One rung at a time rather than jumping to whatever the rating implies,
+// because the ladder is meant to track somebody as they improve, and a bot
+// that leaps two levels after one lucky game is a bot they now cannot beat.
+// The CHECK constraint on the column bounds it; GREATEST and LEAST keep the
+// write from ever hitting it.
+func moveLadder(ctx context.Context, tx pgx.Tx, userID string, score float64) error {
+	step := 0
+	switch score {
+	case 1:
+		step = 1
+	case 0:
+		step = -1
+	}
+	if step == 0 {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `
+		UPDATE users
+		SET bot_level = LEAST(6, GREATEST(1, bot_level + $2))
+		WHERE id = $1`, userID, step)
+	return err
+}
+
 // Profile is a user's public record.
 type Profile struct {
 	Username   string  `json:"username"` // empty for a guest
@@ -126,6 +180,7 @@ type Profile struct {
 	Rating     float64 `json:"rating"`
 	Deviation  float64 `json:"rating_deviation"`
 	RatedGames int     `json:"rated_games"`
+	BotLevel   int     `json:"bot_level"`
 	// Provisional until there are enough games for the rating to mean much.
 	Provisional bool `json:"provisional"`
 }
@@ -137,9 +192,9 @@ func (a *Archive) Profile(ctx context.Context, userID string) (*Profile, error) 
 	// NULL for a guest, who has no username until they sign up.
 	var username *string
 	err := a.pool.QueryRow(ctx, `
-		SELECT username, rating, rating_deviation, rated_games, is_guest
+		SELECT username, rating, rating_deviation, rated_games, is_guest, bot_level
 		FROM users WHERE id = $1`, userID).
-		Scan(&username, &p.Rating, &p.Deviation, &p.RatedGames, &p.IsGuest)
+		Scan(&username, &p.Rating, &p.Deviation, &p.RatedGames, &p.IsGuest, &p.BotLevel)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

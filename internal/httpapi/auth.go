@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/leozh0u/blundernet/internal/engine"
 	"github.com/leozh0u/blundernet/internal/rating"
 	"github.com/leozh0u/blundernet/internal/store"
 )
@@ -273,6 +274,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, &store.Profile{
 			IsGuest: true, Rating: rating.DefaultRating,
 			Deviation: rating.DefaultDeviation, Provisional: true,
+			BotLevel: engine.DefaultLevel,
 		})
 		return
 	}

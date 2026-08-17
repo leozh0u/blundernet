@@ -52,6 +52,53 @@ func (w *Worker) Run(ctx context.Context) {
 
 // Process plays the engine move for one job. Returning nil means the job
 // is finished with (including "safely ignored"); an error means retry.
+// hint answers "what should I play here" for the player's own side. It runs
+// the strongest search rather than the game's level, because a hint from the
+// bot you are beating is worth nothing, and it publishes rather than plays:
+// the game state is never touched, so a hint arriving late or twice cannot
+// move a piece.
+func (w *Worker) hint(ctx context.Context, g *game.Game, j queue.Job) error {
+	if g.Ply != j.Ply || g.Status != game.StatusOngoing || g.Turn() != g.PlayerColor {
+		obs.JobOutcome(obs.JobStale)
+		return nil
+	}
+	uci, err := w.hintMove(g)
+	if err != nil {
+		obs.JobOutcome(obs.JobError)
+		return err
+	}
+	raw, err := json.Marshal(map[string]any{
+		"type": "hint", "id": g.ID, "ply": g.Ply, "uci": uci,
+	})
+	if err != nil {
+		obs.JobOutcome(obs.JobError)
+		return err
+	}
+	if err := w.Games.Publish(ctx, g.ID, raw); err != nil {
+		obs.JobOutcome(obs.JobError)
+		return err
+	}
+	obs.JobOutcome(obs.JobPlayed)
+	return nil
+}
+
+func (w *Worker) hintMove(g *game.Game) (string, error) {
+	if leveled, ok := w.Engine.(engine.Leveled); ok {
+		return leveled.BestMoveAt(g.FEN(), engine.MaxLevel)
+	}
+	return w.Engine.BestMove(g.FEN())
+}
+
+// bestMove plays at the game's level when the engine can, and at its built-in
+// strength when it cannot. The material fallback has one setting, and the
+// stack has to keep working without the model.
+func (w *Worker) bestMove(g *game.Game) (string, error) {
+	if leveled, ok := w.Engine.(engine.Leveled); ok && g.Level > 0 {
+		return leveled.BestMoveAt(g.FEN(), g.Level)
+	}
+	return w.Engine.BestMove(g.FEN())
+}
+
 func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 	g, err := w.Games.Get(ctx, j.GameID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -62,6 +109,10 @@ func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 		obs.JobOutcome(obs.JobError)
 		return err
 	}
+	if j.Kind == queue.KindHint {
+		return w.hint(ctx, g, j)
+	}
+
 	// Stale or duplicate delivery: the position has moved past this job.
 	if g.Ply != j.Ply || g.Status != game.StatusOngoing || g.Turn() != g.EngineColor() {
 		obs.JobOutcome(obs.JobStale)
@@ -69,7 +120,7 @@ func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 	}
 
 	start := time.Now()
-	uci, err := w.Engine.BestMove(g.FEN())
+	uci, err := w.bestMove(g)
 	if err != nil {
 		obs.JobOutcome(obs.JobError)
 		return err

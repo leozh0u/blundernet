@@ -193,3 +193,16 @@ func (u *Users) ByID(ctx context.Context, id string) (*User, error) {
 	}
 	return &user, nil
 }
+
+// BotLevel is the rung of the ladder this player is on. Guests have one too,
+// because a guest is a real user row and the ladder is what makes the first
+// game a fair one.
+func (u *Users) BotLevel(ctx context.Context, userID string) (int, error) {
+	var level int
+	err := u.pool.QueryRow(ctx,
+		"SELECT bot_level FROM users WHERE id = $1", userID).Scan(&level)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return level, err
+}

@@ -1066,3 +1066,26 @@ button {
   color: var(--ink-faint);
   font-size: 0.94rem;
 }
+
+/* Level picker on the play page. Same chips as the puzzle filters, because
+   they do the same job and learning two controls for one idea is one too
+   many. */
+.levels {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.ladder {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.ladder i {
+  margin-left: 0.4rem;
+  font-style: normal;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
