@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -16,16 +15,14 @@ import (
 
 	"github.com/leozh0u/blundernet/internal/puzzle"
 	"github.com/leozh0u/blundernet/internal/store"
+	"github.com/leozh0u/blundernet/internal/testdb"
 )
 
 // The puzzle routes are a thin layer over SQL, so they are tested against a
 // real database. They skip without one, the same as the store tests.
 func newPuzzleServer(t *testing.T) *Server {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	url := testdb.URL(t, "httpapi_test")
 	ctx := context.Background()
 	archive, err := store.NewArchive(ctx, url)
 	if err != nil {
@@ -359,5 +356,44 @@ func TestRankedSolvingRaisesTheRating(t *testing.T) {
 	}
 	if next.ID == "" {
 		t.Fatal("no puzzle after finishing one")
+	}
+}
+
+// The wrong-answer list holds what you failed and drops it once you get it
+// right, which is the whole point of keeping attempts as rows.
+func TestFailedPuzzlesDrillList(t *testing.T) {
+	s := newPuzzleServer(t)
+
+	// Nobody signed in, so there is nothing to have failed.
+	rec := do(t, s, "GET", "/api/puzzles/failed", "")
+	var empty searchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || len(empty.Puzzles) != 0 {
+		t.Fatalf("signed out: %d %s", rec.Code, rec.Body)
+	}
+
+	fail := do(t, s, "POST", "/api/puzzles/fork03/attempt", `{"solved":false}`)
+	cookies := fail.Result().Cookies()
+
+	rec = asUser(s, cookies, "GET", "/api/puzzles/failed", "")
+	var listed searchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Puzzles) != 1 || listed.Puzzles[0].ID != "fork03" {
+		t.Fatalf("got %+v, want the failed puzzle", listed.Puzzles)
+	}
+
+	// Getting it right afterwards takes it off the list.
+	asUser(s, cookies, "POST", "/api/puzzles/fork03/attempt", `{"solved":true}`)
+	rec = asUser(s, cookies, "GET", "/api/puzzles/failed", "")
+	var after searchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Puzzles) != 0 {
+		t.Errorf("solving it should clear it, got %+v", after.Puzzles)
 	}
 }

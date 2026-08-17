@@ -109,6 +109,7 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/games/{id}/ws", s.handleWS)
 	mux.HandleFunc("GET /api/puzzles", s.limit("puzzles", s.limits.Puzzles, s.handlePuzzleSearch))
 	mux.HandleFunc("GET /api/puzzles/themes", s.handlePuzzleThemes)
+	mux.HandleFunc("GET /api/puzzles/failed", s.limit("puzzles", s.limits.Puzzles, s.handlePuzzleFailed))
 	mux.HandleFunc("GET /api/puzzles/ranked", s.limit("puzzles", s.limits.Puzzles, s.handleRankedNext))
 	mux.HandleFunc("POST /api/puzzles/ranked/move", s.limit("move", s.limits.Move, s.handleRankedMove))
 	mux.HandleFunc("GET /api/puzzles/ranked/me", s.handleRankedProfile)

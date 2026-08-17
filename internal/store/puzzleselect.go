@@ -311,6 +311,42 @@ func (p *Puzzles) ByID(ctx context.Context, id string) (puzzle.Puzzle, bool, err
 	return out, true, nil
 }
 
+// ByIDs loads several puzzles at once, in no particular order. Used by the
+// wrong-answer drill, which decides what to fetch from the attempts table and
+// then needs the puzzles behind those ids.
+func (p *Puzzles) ByIDs(ctx context.Context, ids []string) ([]puzzle.Puzzle, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := p.pool.Query(ctx,
+		fmt.Sprintf("SELECT %s FROM puzzles WHERE id = ANY ($1)", selectColumns), ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byID := make(map[string]puzzle.Puzzle, len(ids))
+	for rows.Next() {
+		q, err := scanPuzzle(rows)
+		if err != nil {
+			return nil, err
+		}
+		byID[q.ID] = q
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Returned in the order asked for, because the caller's order is newest
+	// failure first and that is what the drill list shows.
+	out := make([]puzzle.Puzzle, 0, len(byID))
+	for _, id := range ids {
+		if q, ok := byID[id]; ok {
+			out = append(out, q)
+		}
+	}
+	return out, nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }

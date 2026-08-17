@@ -201,6 +201,45 @@ func (s *Server) handlePuzzleAttempt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"recorded": true})
 }
 
+// handlePuzzleFailed is the drill list: the puzzles you got wrong and have not
+// since got right. This is the part that makes the site worth a second visit,
+// and it is why attempts are rows rather than a counter.
+func (s *Server) handlePuzzleFailed(w http.ResponseWriter, r *http.Request) {
+	if s.puzzles == nil {
+		httpError(w, http.StatusServiceUnavailable, "puzzles are not configured")
+		return
+	}
+	user := UserFrom(r.Context())
+	if user == nil {
+		// Nobody has failed anything yet, which is not an error. A signed out
+		// visitor has no history because there is nothing to attach it to.
+		writeJSON(w, http.StatusOK, map[string]any{"puzzles": []puzzleView{}})
+		return
+	}
+	limit := atoiDefault(r.URL.Query().Get("limit"), defaultBatch)
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > maxBatch {
+		limit = maxBatch
+	}
+	ids, err := s.puzzles.Failed(r.Context(), user.ID, limit)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	found, err := s.puzzles.ByIDs(r.Context(), ids)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	out := make([]puzzleView, 0, len(found))
+	for _, p := range found {
+		out = append(out, toPuzzleView(p, true))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"puzzles": out})
+}
+
 // handlePuzzleThemes lists the themes worth offering as filters, with how many
 // puzzles each one has. The counts come from the same summary the sampler
 // uses, so the filter menu cannot offer something the sampler cannot serve.

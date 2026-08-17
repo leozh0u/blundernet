@@ -27,8 +27,13 @@ type PuzzleSource interface {
 
 // stagingDDL matches the columns the loader writes, not the whole table. The
 // counters this site keeps about its own users are deliberately absent.
+//
+// TEMP rather than a plain table: it is private to one connection, so two
+// loads running at once cannot drop each other's staging table halfway
+// through, and it is not written to the write-ahead log either, which is the
+// other reason a staging table wants to be cheap.
 const stagingDDL = `
-	CREATE UNLOGGED TABLE puzzles_staging (
+	CREATE TEMP TABLE puzzles_staging (
 	    id             TEXT NOT NULL,
 	    fen            TEXT NOT NULL,
 	    moves          TEXT NOT NULL,
@@ -53,27 +58,35 @@ var stagingColumns = []string{
 // a fresh dump: a straight COPY into puzzles would collide on every row that
 // already exists, and a per-row upsert of six million rows takes hours.
 //
-// The staging table is UNLOGGED, which skips the write-ahead log. The cost is
-// that it does not survive a crash, and the whole point of it is that it does
-// not need to: a failed load is re-run from the file.
+// Everything happens on one connection held for the whole load, because the
+// staging table is temporary and a temporary table only exists for the session
+// that made it.
 //
 // Returns how many rows were copied and how many ended up in puzzles.
 func (p *Puzzles) Load(ctx context.Context, src PuzzleSource) (copied, merged int64, err error) {
-	if _, err := p.pool.Exec(ctx, "DROP TABLE IF EXISTS puzzles_staging"); err != nil {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, "DROP TABLE IF EXISTS puzzles_staging"); err != nil {
 		return 0, 0, fmt.Errorf("drop staging: %w", err)
 	}
-	if _, err := p.pool.Exec(ctx, stagingDDL); err != nil {
+	if _, err := conn.Exec(ctx, stagingDDL); err != nil {
 		return 0, 0, fmt.Errorf("create staging: %w", err)
 	}
 	defer func() {
-		if _, dropErr := p.pool.Exec(context.WithoutCancel(ctx),
+		// Pooled connections are reused, so the table is dropped rather than
+		// left for the session to clean up whenever it eventually ends.
+		if _, dropErr := conn.Exec(context.WithoutCancel(ctx),
 			"DROP TABLE IF EXISTS puzzles_staging"); dropErr != nil && err == nil {
 			err = fmt.Errorf("drop staging: %w", dropErr)
 		}
 	}()
 
 	rows := &copySource{src: src}
-	copied, err = p.pool.CopyFrom(ctx,
+	copied, err = conn.CopyFrom(ctx,
 		pgx.Identifier{"puzzles_staging"}, stagingColumns, rows)
 	if err != nil {
 		return copied, 0, fmt.Errorf("copy: %w", err)
@@ -82,7 +95,7 @@ func (p *Puzzles) Load(ctx context.Context, src PuzzleSource) (copied, merged in
 	// A dump can carry the same id twice only if Lichess made a mistake, but
 	// ON CONFLICT cannot handle two conflicting rows in one statement, so the
 	// merge deduplicates first and fails loudly rather than half loading.
-	tag, err := p.pool.Exec(ctx, `
+	tag, err := conn.Exec(ctx, `
 		INSERT INTO puzzles (id, fen, moves, rating, rating_deviation,
 		                     solution_plies, phase, themes, popularity,
 		                     nb_plays, game_url, opening_tags, source)

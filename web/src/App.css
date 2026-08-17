@@ -739,6 +739,13 @@ button {
   background: var(--surface);
 }
 
+/* The corpus filters have nothing to say while the wrong-answer list is up,
+   and the attribute needs its own rule because a display value beats the
+   plain hidden attribute. */
+.filter-row[data-hidden] {
+  display: none;
+}
+
 .filter-row {
   display: flex;
   align-items: baseline;

@@ -98,6 +98,7 @@ export default function Puzzles() {
   const [phase, setPhase] = useState('loading') // loading, solving, solved, failed, empty
   const [selected, setSelected] = useState(null)
   const [hints, setHints] = useState(0)
+  const [wrongOnly, setWrongOnly] = useState(false)
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
@@ -115,14 +116,25 @@ export default function Puzzles() {
   }, [])
   useEffect(() => clearLater, [clearLater])
 
-  const fetchBatch = useCallback(async (f) => {
-    const q = filterToQuery(f)
-    q.set('limit', '10')
-    const res = await fetch(`/api/puzzles?${q}`)
-    if (!res.ok) throw new Error('The puzzle search failed. Try again.')
-    const body = await res.json()
-    return body.puzzles || []
-  }, [])
+  // The wrong-answer list is a different query, not a filter: it is driven by
+  // your attempts rather than by the corpus, so it ignores the filter bar
+  // instead of pretending to combine with it.
+  const fetchBatch = useCallback(
+    async (f) => {
+      if (wrongOnly) {
+        const res = await fetch('/api/puzzles/failed?limit=10')
+        if (!res.ok) throw new Error('That list could not be loaded. Try again.')
+        return (await res.json()).puzzles || []
+      }
+      const q = filterToQuery(f)
+      q.set('limit', '10')
+      const res = await fetch(`/api/puzzles?${q}`)
+      if (!res.ok) throw new Error('The puzzle search failed. Try again.')
+      const body = await res.json()
+      return body.puzzles || []
+    },
+    [wrongOnly],
+  )
 
   // Show a puzzle: set the position before the blunder, then play the blunder
   // after a beat so you see what you are being asked to punish.
@@ -177,6 +189,18 @@ export default function Puzzles() {
     // Only on mount and on an explicit filter change, which calls load itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Flipping between the search and the wrong-answer list reloads, since they
+  // are two different queries rather than two views of one.
+  const firstRender = useRef(true)
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    load(filter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wrongOnly])
 
   const next = useCallback(async () => {
     if (queue.length > 0) {
@@ -377,6 +401,23 @@ export default function Puzzles() {
     <main className="puzzles">
       <section className="filters" aria-label="Puzzle filters">
         <div className="filter-row">
+          <span className="filter-label">Drill</span>
+          <div className="chips">
+            <button
+              className={`chip ${!wrongOnly ? 'on' : ''}`}
+              onClick={() => setWrongOnly(false)}
+            >
+              Search
+            </button>
+            <button
+              className={`chip ${wrongOnly ? 'on' : ''}`}
+              onClick={() => setWrongOnly(true)}
+            >
+              Ones I got wrong
+            </button>
+          </div>
+        </div>
+        <div className="filter-row" data-hidden={wrongOnly || undefined}>
           <span className="filter-label">Rating</span>
           <div className="chips">
             {RATING_BANDS.map((b) => (
@@ -391,7 +432,7 @@ export default function Puzzles() {
           </div>
         </div>
 
-        <div className="filter-row">
+        <div className="filter-row" data-hidden={wrongOnly || undefined}>
           <span className="filter-label">Length</span>
           <div className="chips">
             <button
@@ -412,7 +453,7 @@ export default function Puzzles() {
           </div>
         </div>
 
-        <div className="filter-row">
+        <div className="filter-row" data-hidden={wrongOnly || undefined}>
           <span className="filter-label">Phase</span>
           <div className="chips">
             {PHASES.map((p) => (
@@ -427,7 +468,7 @@ export default function Puzzles() {
           </div>
         </div>
 
-        <div className="filter-row">
+        <div className="filter-row" data-hidden={wrongOnly || undefined}>
           <span className="filter-label">
             <label htmlFor="theme">Theme</label>
           </span>
@@ -449,10 +490,12 @@ export default function Puzzles() {
 
       {phase === 'empty' ? (
         <section className="puzzle-empty">
-          <h2>Nothing matches that</h2>
+          <h2>{wrongOnly ? 'Nothing to redo' : 'Nothing matches that'}</h2>
           <p>
             {error ||
-              'No puzzle has all of those at once. Widen the rating, or drop the theme.'}
+              (wrongOnly
+                ? 'Nothing here yet. Puzzles you get wrong land in this list, and leave it once you get them right.'
+                : 'No puzzle has all of those at once. Widen the rating, or drop the theme.')}
           </p>
         </section>
       ) : (

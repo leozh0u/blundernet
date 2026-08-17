@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/leozh0u/blundernet/internal/puzzle"
+	"github.com/leozh0u/blundernet/internal/testdb"
 )
 
 // These run against a real Postgres because what is being tested is the SQL
@@ -14,10 +15,7 @@ import (
 // TEST_DATABASE_URL points at one; CI starts a service container.
 func testPuzzles(t *testing.T) (*Puzzles, context.Context) {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	url := testdb.URL(t, "store_test")
 	ctx := context.Background()
 	archive, err := NewArchive(ctx, url)
 	if err != nil {
