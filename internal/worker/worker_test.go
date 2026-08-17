@@ -29,12 +29,31 @@ func (e *scriptedEngine) BestMove(fen string) (string, error) {
 }
 
 func setup(t *testing.T) (*Worker, *store.Games, *scriptedEngine) {
+	w, games, eng, _ := setupWithRedis(t)
+	return w, games, eng
+}
+
+func setupWithRedis(t *testing.T) (*Worker, *store.Games, *scriptedEngine, *redis.Client) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	games := store.NewGames(rdb)
 	eng := &scriptedEngine{moves: []string{"e7e5", "b8c6"}}
-	return &Worker{Games: games, Engine: eng}, games, eng
+	return &Worker{Games: games, Engine: eng}, games, eng, rdb
+}
+
+// waitForSubscriber blocks until the subscription is registered on the server,
+// so a publish that follows cannot be dropped for having nobody listening.
+func waitForSubscriber(t *testing.T, rdb *redis.Client) {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		channels, err := rdb.PubSubChannels(context.Background(), "game-events:*").Result()
+		if err == nil && len(channels) > 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("subscription never registered")
 }
 
 func TestProcessPlaysEngineMove(t *testing.T) {
@@ -114,7 +133,7 @@ func TestStaleJobAndMissingGameAreNoOps(t *testing.T) {
 // A hint runs the same search and publishes the answer. What it must not do
 // is move a piece: the game is the player's to play.
 func TestHintPublishesWithoutTouchingTheGame(t *testing.T) {
-	w, games, eng := setup(t)
+	w, games, eng, rdb := setupWithRedis(t)
 	ctx := context.Background()
 
 	g := game.New("h1", "white", 3, false)
@@ -125,6 +144,10 @@ func TestHintPublishesWithoutTouchingTheGame(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events := games.Subscribe(ctx, "h1")
+	// Redis pub/sub drops a message with no subscriber, and Subscribe returns
+	// before the SUBSCRIBE has reached the server. Publishing into that gap is
+	// what made this test fail one run in ten on CI and never on a laptop.
+	waitForSubscriber(t, rdb)
 
 	if err := w.Process(ctx, queue.Job{GameID: "h1", Ply: 0, Kind: queue.KindHint}); err != nil {
 		t.Fatal(err)

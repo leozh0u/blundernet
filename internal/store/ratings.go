@@ -181,6 +181,17 @@ type Profile struct {
 	Deviation  float64 `json:"rating_deviation"`
 	RatedGames int     `json:"rated_games"`
 	BotLevel   int     `json:"bot_level"`
+
+	// The puzzle side of the same account. Tactical strength and playing
+	// strength are different skills, so they are different numbers, and the
+	// profile is where that gets said rather than left for somebody to guess
+	// from a bare number in the corner.
+	PuzzleRating    float64 `json:"puzzle_rating"`
+	PuzzleDeviation float64 `json:"puzzle_rating_deviation"`
+	PuzzlesSolved   int     `json:"puzzles_solved"`
+	PuzzlesTried    int     `json:"puzzles_tried"`
+	Favourites      int     `json:"favourites"`
+	ToReview        int     `json:"to_review"`
 	// Provisional until there are enough games for the rating to mean much.
 	Provisional bool `json:"provisional"`
 }
@@ -191,10 +202,25 @@ func (a *Archive) Profile(ctx context.Context, userID string) (*Profile, error) 
 	var p Profile
 	// NULL for a guest, who has no username until they sign up.
 	var username *string
+	// One round trip. The counts are subqueries rather than joins because each
+	// one is an independent aggregate over a different table, and a join would
+	// multiply the rows before counting them.
 	err := a.pool.QueryRow(ctx, `
-		SELECT username, rating, rating_deviation, rated_games, is_guest, bot_level
-		FROM users WHERE id = $1`, userID).
-		Scan(&username, &p.Rating, &p.Deviation, &p.RatedGames, &p.IsGuest, &p.BotLevel)
+		SELECT u.username, u.rating, u.rating_deviation, u.rated_games, u.is_guest,
+		       u.bot_level, u.puzzle_rating, u.puzzle_rating_deviation, u.puzzles_solved,
+		       (SELECT count(DISTINCT puzzle_id) FROM puzzle_attempts a
+		         WHERE a.user_id = u.id),
+		       (SELECT count(*) FROM puzzle_favourites f WHERE f.user_id = u.id),
+		       (SELECT count(DISTINCT a.puzzle_id) FROM puzzle_attempts a
+		         WHERE a.user_id = u.id AND NOT a.solved
+		           AND NOT EXISTS (
+		               SELECT 1 FROM puzzle_attempts b
+		               WHERE b.user_id = a.user_id AND b.puzzle_id = a.puzzle_id
+		                 AND b.solved AND b.attempted_at > a.attempted_at))
+		FROM users u WHERE u.id = $1`, userID).
+		Scan(&username, &p.Rating, &p.Deviation, &p.RatedGames, &p.IsGuest,
+			&p.BotLevel, &p.PuzzleRating, &p.PuzzleDeviation, &p.PuzzlesSolved,
+			&p.PuzzlesTried, &p.Favourites, &p.ToReview)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

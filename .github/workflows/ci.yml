@@ -32,10 +32,14 @@ jobs:
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: Vet
         run: go vet ./...
+      # -race because the interesting parts of this codebase are concurrent:
+      # two writers on a game, a pub/sub fan-out, and a worker pool. A data
+      # race that only shows up under load is exactly the kind of bug this
+      # catches for free on every push.
       - name: Test
         env:
           TEST_DATABASE_URL: postgres://blundernet:blundernet@localhost:5432/blundernet_test
-        run: go test ./...
+        run: go test -race ./...
       - name: Build
         run: go build ./...
 
