@@ -16,6 +16,11 @@ import (
 const (
 	ModeRated    = "rated"
 	ModeLearning = "learning"
+	// A game between two people. The bot never gets a job for one, and
+	// nothing about it is rated: there is no second Glicko player here and
+	// inventing one from a link somebody shared would be a rating anybody
+	// could farm with a second tab.
+	ModeFriend = "friend"
 )
 
 type Status string
@@ -46,8 +51,13 @@ type Game struct {
 	// The bot's strength for this game, and whether the result moves ratings.
 	// Both travel with the game because the worker picks the move and the
 	// archive write happens there too, with no session to ask.
-	Level       int       `json:"level"`
-	Rated       bool      `json:"rated"`
+	Level int  `json:"level"`
+	Rated bool `json:"rated"`
+	// Set on a game between two people. OpponentID fills in when the second
+	// person opens the link, and is what decides which side a request is
+	// allowed to move.
+	Friend      bool      `json:"friend,omitempty"`
+	OpponentID  string    `json:"opponent_id,omitempty"`
 	Status      Status    `json:"status"`
 	Result      string    `json:"result"`      // "1-0", "0-1", "1/2-1/2", ""
 	Termination string    `json:"termination"` // "checkmate", "stalemate", "resignation", ...
@@ -69,7 +79,27 @@ func New(id, playerColor string, level int, rated bool) *Game {
 	}
 }
 
-// EngineColor returns the side the engine plays.
+// ColorFor returns the side this user is allowed to move, and false when they
+// are watching rather than playing. In a game against the bot the creator has
+// one side and the bot has the other; in a friend game the second seat
+// belongs to whoever opened the link first.
+func (g *Game) ColorFor(userID string) (string, bool) {
+	if !g.Friend {
+		return g.PlayerColor, true
+	}
+	switch userID {
+	case "":
+		return "", false
+	case g.UserID:
+		return g.PlayerColor, true
+	case g.OpponentID:
+		return g.EngineColor(), true
+	}
+	return "", false
+}
+
+// EngineColor returns the side the engine plays. In a friend game it is the
+// side the second player takes.
 func (g *Game) EngineColor() string {
 	if g.PlayerColor == "white" {
 		return "black"

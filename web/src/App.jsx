@@ -19,6 +19,16 @@ const api = {
     if (!res.ok) throw new Error('The game would not start. Try again.')
     return res.json()
   },
+  async join(id) {
+    const res = await fetch(`/api/games/${id}/join`, { method: 'POST' })
+    if (!res.ok) throw new Error('That game is full or gone.')
+    return res.json()
+  },
+  async game(id) {
+    const res = await fetch(`/api/games/${id}`)
+    if (!res.ok) throw new Error('No such game.')
+    return res.json()
+  },
   async hint(id) {
     await fetch(`/api/games/${id}/hint`, { method: 'POST' })
   },
@@ -99,6 +109,12 @@ function outcome(state) {
 // Puzzles are the front page. Playing the engine is one model against one
 // opponent; the puzzle side is six million positions with a search over them,
 // and it is the part somebody would come back to.
+// /play/<id> is a friend game somebody shared.
+function sharedGameID(path) {
+  const m = path.match(/^\/play\/([-a-f0-9]{8,})$/)
+  return m ? m[1] : null
+}
+
 function routeOf(path) {
   if (path.startsWith('/puzzles/streak')) return 'streak'
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
@@ -139,6 +155,9 @@ export default function App() {
   const [hint, setHint] = useState(null)
   const [review, setReview] = useState(null)
   const [reviewing, setReviewing] = useState(false)
+  // The side this browser plays. In a friend game it is not player_color,
+  // which names the side of whoever made the game.
+  const [myColor, setMyColor] = useState('white')
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -149,6 +168,30 @@ export default function App() {
   }, [state?.status])
 
   useEffect(() => () => wsRef.current?.close(), [])
+
+  // Opening a shared game link takes the second seat, if it is still free.
+  useEffect(() => {
+    const id = sharedGameID(window.location.pathname)
+    if (!id) return
+    api
+      .join(id)
+      .then((st) => {
+        setState(st)
+        setMyColor(st.you || st.player_color)
+        connect(st.id)
+      })
+      .catch(() =>
+        api
+          .game(id)
+          .then((st) => {
+            setState(st)
+            setMyColor(st.you || 'white')
+            connect(st.id)
+          })
+          .catch((e) => setError(e.message)),
+      )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const onPop = () => setRoute(routeOf(window.location.pathname))
@@ -201,13 +244,18 @@ export default function App() {
     try {
       const st = await api.createGame(color, mode, level)
       setState(st)
+      setMyColor(st.you || st.player_color)
+      if (st.friend) {
+        window.history.pushState({}, '', `/play/${st.id}`)
+      }
       connect(st.id)
     } catch (e) {
       setError(e.message)
     }
   }
 
-  const myTurn = state && state.status === 'ongoing' && state.turn === state.player_color
+  const myTurn =
+    state && state.status === 'ongoing' && state.turn === myColor && !state.waiting
 
   const tryMove = (from, to) => {
     if (!myTurn) return false
@@ -237,7 +285,7 @@ export default function App() {
     if (selected === square) return setSelected(null)
     if (selected && tryMove(selected, square)) return
     const piece = new Chess(state.fen).get(square)
-    const mine = piece && piece.color === (state.player_color === 'white' ? 'w' : 'b')
+    const mine = piece && piece.color === (myColor === 'white' ? 'w' : 'b')
     setSelected(mine ? square : null)
   }
 
@@ -353,6 +401,14 @@ export default function App() {
           <div className="modes" role="tablist">
             <button
               role="tab"
+              aria-selected={mode === 'friend'}
+              className={mode === 'friend' ? 'on' : ''}
+              onClick={() => setMode('friend')}
+            >
+              A friend
+            </button>
+            <button
+              role="tab"
               aria-selected={mode === 'learning'}
               className={mode === 'learning' ? 'on' : ''}
               onClick={() => setMode('learning')}
@@ -370,7 +426,11 @@ export default function App() {
           </div>
 
           <div className="levels">
-            {mode === 'learning' ? (
+            {mode === 'friend' ? (
+              <span className="ladder">
+                Pick a side <i>then send them the link</i>
+              </span>
+            ) : mode === 'learning' ? (
               <>
                 <span className="filter-label">Level</span>
                 <div className="chips">
@@ -433,7 +493,7 @@ export default function App() {
                 position={state.fen}
                 onPieceDrop={(f, t) => tryMove(f, t)}
                 onSquareClick={onSquareClick}
-                boardOrientation={state.player_color}
+                boardOrientation={myColor}
                 arePiecesDraggable={state.status === 'ongoing'}
                 customBoardStyle={{ borderRadius: '6px' }}
                 customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
@@ -441,7 +501,7 @@ export default function App() {
                 customSquareStyles={squareStyles}
               />
               <BoardOverlay
-                orientation={state.player_color}
+                orientation={myColor}
                 glow={hint?.from}
                 arrow={hint}
               />
@@ -465,15 +525,24 @@ export default function App() {
 
           <aside className="panel">
             <div className={`state ${myTurn ? 'yours' : 'machine'}`}>
-              {state.status === 'finished' ? (
+              {state.waiting ? (
+                <>
+                  <span className="head">Waiting for your friend</span>
+                  <span className="hint">Send them this page's link.</span>
+                </>
+              ) : state.status === 'finished' ? (
                 <span className="head">The game is done</span>
               ) : myTurn ? (
                 <span className="head">Your move</span>
               ) : (
-                <>
-                  <span className="head">Thinking</span>
-                  <SearchTree />
-                </>
+                state.friend ? (
+                  <span className="head">Their move</span>
+                ) : (
+                  <>
+                    <span className="head">Thinking</span>
+                    <SearchTree />
+                  </>
+                )
               )}
             </div>
 

@@ -109,6 +109,7 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/games/{id}", s.handleGet)
 	mux.HandleFunc("POST /api/games/{id}/moves", s.limit("move", s.limits.Move, s.handleMove))
 	mux.HandleFunc("POST /api/games/{id}/hint", s.limit("move", s.limits.Move, s.handleHint))
+	mux.HandleFunc("POST /api/games/{id}/join", s.limit("create", s.limits.CreateGame, s.handleJoin))
 	mux.HandleFunc("POST /api/games/{id}/resign", s.handleResign)
 	mux.HandleFunc("POST /api/games/{id}/review", s.limit("create", s.limits.CreateGame, s.handleReviewStart))
 	mux.HandleFunc("GET /api/games/{id}/review", s.handleReview)
@@ -156,15 +157,32 @@ type State struct {
 	PlayerColor string   `json:"player_color"`
 	Level       int      `json:"level"`
 	Rated       bool     `json:"rated"`
-	Status      string   `json:"status"`
-	Result      string   `json:"result,omitempty"`
-	Termination string   `json:"termination,omitempty"`
+	Friend      bool     `json:"friend,omitempty"`
+	Waiting     bool     `json:"waiting,omitempty"`
+	// The side this viewer plays. Only the responses to a request know it,
+	// because a friend game has two people watching the same channel and the
+	// broadcast cannot be addressed to either of them. The browser keeps what
+	// it was told when it created or joined the game.
+	You         string `json:"you,omitempty"`
+	Status      string `json:"status"`
+	Result      string `json:"result,omitempty"`
+	Termination string `json:"termination,omitempty"`
+}
+
+// ToStateFor is ToState plus the one field that depends on who is asking.
+func ToStateFor(g *game.Game, userID string) State {
+	st := ToState(g)
+	if colour, ok := g.ColorFor(userID); ok {
+		st.You = colour
+	}
+	return st
 }
 
 func ToState(g *game.Game) State {
 	return State{
 		Type: "state", ID: g.ID, FEN: g.FEN(), Moves: g.Moves, Turn: g.Turn(),
 		PlayerColor: g.PlayerColor, Level: g.Level, Rated: g.Rated,
+		Friend: g.Friend, Waiting: g.Friend && g.OpponentID == "",
 		Status: string(g.Status),
 		Result: g.Result, Termination: g.Termination,
 	}
@@ -205,8 +223,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if req.Mode == "" {
 		req.Mode = game.ModeRated
 	}
-	if req.Mode != game.ModeRated && req.Mode != game.ModeLearning {
-		httpError(w, http.StatusBadRequest, "mode must be rated or learning")
+	if req.Mode != game.ModeRated && req.Mode != game.ModeLearning &&
+		req.Mode != game.ModeFriend {
+		httpError(w, http.StatusBadRequest, "mode must be rated, learning or friend")
 		return
 	}
 
@@ -237,6 +256,10 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	g := game.New(uuid.NewString(), req.Color, level, rated)
+	if req.Mode == game.ModeFriend {
+		g.Friend = true
+		g.Rated = false
+	}
 	if user != nil {
 		g.UserID = user.ID
 	}
@@ -245,14 +268,15 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	obs.GameCreated(req.Color)
-	// Player chose black: the engine opens.
-	if req.Color == "black" {
+	// Player chose black: the engine opens. Nobody opens for them in a friend
+	// game; the other person does.
+	if req.Color == "black" && !g.Friend {
 		if err := s.jobs.Enqueue(r.Context(), queue.Job{GameID: g.ID, Ply: 0}); err != nil {
 			internalError(w, err)
 			return
 		}
 	}
-	writeJSON(w, http.StatusCreated, ToState(g))
+	writeJSON(w, http.StatusCreated, ToStateFor(g, userIDOf(r)))
 }
 
 // handleHint asks a worker what the player should play. Learning games only:
@@ -344,7 +368,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		gameError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ToState(g))
+	writeJSON(w, http.StatusOK, ToStateFor(g, userIDOf(r)))
 }
 
 func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
@@ -360,8 +384,13 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		gameError(w, err)
 		return
 	}
+	color, allowed := g.ColorFor(userIDOf(r))
+	if !allowed {
+		httpError(w, http.StatusForbidden, "this is not your game")
+		return
+	}
 	prevPly := g.Ply
-	if err := g.ApplyMove(g.PlayerColor, req.UCI); err != nil {
+	if err := g.ApplyMove(color, req.UCI); err != nil {
 		gameError(w, err)
 		return
 	}
@@ -370,7 +399,55 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.afterChange(r.Context(), g)
-	writeJSON(w, http.StatusOK, ToState(g))
+	writeJSON(w, http.StatusOK, ToStateFor(g, userIDOf(r)))
+}
+
+// handleJoin takes the second seat in a friend game. First to open the link
+// gets it; anyone after that is watching, which is the honest outcome of
+// sharing a link rather than an invitation to fight over the board.
+func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
+	g, err := s.games.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		gameError(w, err)
+		return
+	}
+	if !g.Friend {
+		httpError(w, http.StatusConflict, "this game is against the bot")
+		return
+	}
+	user, err := s.ensureIdentity(w, r)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	if user == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return
+	}
+	// Already seated, either side. Nothing to do and no error to report.
+	if user.ID == g.UserID || user.ID == g.OpponentID {
+		writeJSON(w, http.StatusOK, ToStateFor(g, user.ID))
+		return
+	}
+	if g.OpponentID != "" {
+		httpError(w, http.StatusConflict, "both seats are taken")
+		return
+	}
+	prevPly := g.Ply
+	g.OpponentID = user.ID
+	if err := s.games.Update(r.Context(), g, prevPly); err != nil {
+		gameError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ToStateFor(g, user.ID))
+}
+
+// userIDOf is the caller's id, or empty when signed out.
+func userIDOf(r *http.Request) string {
+	if u := UserFrom(r.Context()); u != nil {
+		return u.ID
+	}
+	return ""
 }
 
 func (s *Server) handleResign(w http.ResponseWriter, r *http.Request) {
@@ -389,7 +466,7 @@ func (s *Server) handleResign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.afterChange(r.Context(), g)
-	writeJSON(w, http.StatusOK, ToState(g))
+	writeJSON(w, http.StatusOK, ToStateFor(g, userIDOf(r)))
 }
 
 // afterChange handles everything downstream of a successful state write:
@@ -409,7 +486,7 @@ func (s *Server) afterChange(ctx context.Context, g *game.Game) {
 		if err := s.archive.SaveFinished(ctx, g); err != nil {
 			slog.Error("archive", "game", g.ID, "err", err)
 		}
-	case g.Turn() == g.EngineColor():
+	case !g.Friend && g.Turn() == g.EngineColor():
 		if err := s.jobs.Enqueue(ctx, queue.Job{GameID: g.ID, Ply: g.Ply}); err != nil {
 			slog.Error("enqueue", "game", g.ID, "err", err)
 		}
@@ -462,7 +539,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	// Initial snapshot, then pub/sub events. One writer goroutine total,
 	// as gorilla requires.
-	if raw, err := json.Marshal(ToState(g)); err == nil {
+	if raw, err := json.Marshal(ToStateFor(g, userIDOf(r))); err == nil {
 		if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
 			return
 		}
