@@ -379,6 +379,30 @@ of the board they are on. Responses to a request now carry `you`; the
 broadcasts do not, because a broadcast goes to both people and cannot be
 addressed to either. The browser keeps what it was told when it joined.
 
+### A dump to S3, not a snapshot, and a restore that was actually run
+
+The database is backed up with `pg_dump` piped through gzip into S3 every
+night, kept for 30 days.
+
+An EBS snapshot was the other option and it is worse here. A snapshot copies
+the whole volume, stays tied to this account and region, and restoring one
+means building an instance around it. A 220MB gzip of SQL goes into any
+Postgres, including a laptop, which is what makes it possible to check. So the
+restore was run: the newest dump pulled back out of S3 into a scratch database
+on the box, counted (23 users, 12 games, 3,253,092 puzzles, 120,785 cells),
+and dropped. Until that has been done once, a backup is a hope.
+
+Two details worth keeping. The script refuses to upload a dump under 100KB,
+because a `pg_dump` that dies halfway still exits zero through a pipe and would
+otherwise overwrite good backups with a stub. And expiry is a bucket lifecycle
+rule rather than a cron job that deletes old files, because the case a backup
+exists for is the one where the instance is gone.
+
+The script and its systemd units live in the Terraform boot script rather than
+having been installed by hand, so a replaced instance comes back with backups
+running. A backup that exists because somebody remembered to set it up once is
+not a backup.
+
 ---
 
 ## Bugs that were caught, and how
