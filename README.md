@@ -2,13 +2,27 @@
 
 [![ci](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml/badge.svg)](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml)
 
-Play chess against [the BlunderNet engine](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch, at a site built to hold up when many people play at once.
+A chess site with two halves: **3,253,092 puzzles you can actually filter**, and games against [the BlunderNet engine](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch.
 
-The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? Stateless Go API instances with game state in Redis, engine inference decoupled onto queue-fed workers, finished games archived in Postgres, and the whole thing defined in Terraform.
+Live at **https://blundernet.com**.
 
-Live at **https://blundernet.com**. That runs a single instance of each service on one box, which is what the site needs and what it costs about ten dollars a month to keep up. The Terraform in `deploy/terraform` is the multi-instance version behind a load balancer, which has been deployed and exercised but is not what is currently serving.
+The puzzles are the part I think is worth something. Chess.com and Lichess both serve them the same way: here is one at roughly your rating, next. Neither lets you say "give me twenty three-move knight forks in an endgame at 1600." The corpus is Lichess's CC0 set, which cost them over a hundred years of CPU time to generate and which they gave away, so generating puzzles is not the interesting problem. Making them searchable is. The LeetCode comparison is the honest one: LeetCode did not invent the problems, it made them filterable, rated, and trackable.
+
+The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? Stateless Go API instances with game state in Redis, engine inference decoupled onto queue-fed workers, a puzzle sampler that draws uniformly from three million rows without sorting them, and the whole thing defined in Terraform.
 
 **Stack:** Go, React, PostgreSQL, Redis, SQS, ONNX Runtime, Docker, Terraform, AWS (ALB, ECS Fargate, ElastiCache, RDS)
+
+## What is on the site
+
+**Puzzles.** Filter by rating, solution length, game phase, theme and opening, then drill. Hints glow the piece, then draw an arrow, then play the move. Wrong answers go on a list you can drill again later, and there is a "another like this" link that is just the filter set as a URL.
+
+**Ranked puzzles.** The solution stays on the server. Both you and the puzzle carry a Glicko-2 rating, and a miss costs more the higher you climb: 1x at 1200, rising to 2.5x. Needs an account, which is the honest consequence of a rating meaning anything.
+
+**Streak.** Puzzles climb 40 rating points per solve. One miss ends the run.
+
+**Play the engine.** Six levels off one model. In learning games the bot adapts to you mid-game; in rated and friend games it never does.
+
+**Play a friend** over a link, unrated. **Post-game review** flags the worst moves using the value head plus material.
 
 ## Architecture
 
@@ -24,12 +38,28 @@ Live at **https://blundernet.com**. That runs a single instance of each service 
                                             engine reply, pub/sub
                                               │
                                               ▼
-                                          Postgres (finished games, stats)
+                                          Postgres (finished games, puzzles, stats)
 ```
 
 A move makes the following trip. The api validates it against the chess rules, writes the new state to Redis with a compare-and-set, publishes the update, and enqueues a job. A worker picks the job up, runs the position through the network, plays the reply through the same compare-and-set path, and publishes again. Every browser watching the game gets both updates pushed over its WebSocket, whichever api instance it happens to be connected to.
 
+A puzzle search does not touch that path at all. It is one Postgres read, described below.
+
 ## Design notes
+
+**Sampling three million rows without sorting them.** The obvious query for "a random puzzle matching this filter" is `ORDER BY random()`, and over six million rows it took 1.4 seconds, because it sorts the whole matching set to take one row off the top. The fix has two parts. Every puzzle gets a stored `sample_key`, the first four bytes of the md5 of its id read as an integer, which is a fixed random shuffle computed once at import. And the filter grid is precomputed into a summary table, `puzzle_cells`, one row per (rating band, phase, solution length, theme) with a count.
+
+A search then draws a cell in proportion to how many puzzles it holds, and range scans that cell from a random cursor in shuffle order. Every column before `sample_key` in the index is an equality, so the cursor is a seek rather than a sort. 0.9 ms. Drawing cells in proportion to size is what keeps the result uniform over the whole matching set rather than uniform over cells, which would otherwise make thirteen-move puzzles as common as three-move ones.
+
+Two bugs in that came out of running it rather than reading it. A nil Go slice reaches Postgres as NULL, and every comparison against NULL is NULL rather than false, so an unset filter silently matched nothing instead of everything. And rare themes returned empty because the sampler was drawing cells that held none of them, which is why the cell counts are keyed by theme and the weights come from the rarest theme asked for.
+
+**The puzzle search is I/O bound, and I have the number.** Load tested against production with k6. The corpus heap is 1,095MB with 270MB of indexes, on a box with 910MB of RAM, and the sampler reads random rows by design, so the working set does not fit and most reads are cold: 2,599 reads a second at 92% disk utilization, Postgres sitting in `DataFileRead`, CPU almost idle.
+
+The expensive request is a themed one. A theme is a recheck against the heap rather than an index condition, and the common themes are not that common inside a cell: `skewer` is one row in 36, `backRankMate` one in 34, `mateIn2` one in 3.5. Because the scan walks the shuffle, those 36 rows are 36 random pages. Past a point the planner abandons the ordered scan for a `BitmapAnd` of the sample and theme indexes and then sorts everything to apply the limit, which measured 5,154 pages and 2.3 seconds for 32 rows. Forcing the ordered scan back on is worse, at 9,399 pages.
+
+So the scan asks for fewer rows: `candidatesPerScan` went from 32 to 12, which cuts the walk directly and keeps the planner off the bitmap. Measured over twelve real cells for each of seven themes, total pages touched went from 55,821 to 20,602.
+
+That is the cheap lever, and it does not fix the cause. The fix that would is an index the theme can be tested against without touching the heap, and it does not fit: 73 themes over 14.8M theme-rows is the size of the corpus again. What is left is memory, which is a monthly bill rather than an engineering decision.
 
 **The api servers hold no state.** Live games exist in Redis with a 24-hour TTL, finished games in Postgres, and the servers themselves only hold WebSocket connections. Any instance can serve any request, which is what lets the fleet scale horizontally and lets a task die mid-game without the player noticing. Cross-instance WebSocket delivery works because every instance subscribes to game events over Redis pub/sub rather than keeping per-game connection registries.
 
@@ -55,6 +85,15 @@ open http://localhost:8080
 ./scripts/e2e.sh                 # scripted game against the engine
 ```
 
+Puzzles are a separate import, streamed from Lichess rather than kept as a file. The full set is 6.1 million rows and about 2.5GB with indexes, so pass a limit for a local set:
+
+```
+make puzzles PUZZLE_ARGS="-limit 100000"
+make puzzles                     # the whole thing, ~100 seconds on a laptop
+```
+
+Re-running it monthly is how puzzle ratings stay current. Production carries the `popularity >= 90` subset, 3,253,092 of the 6.1M: the ones below that bar are puzzles Lichess users downvoted, usually for having a second decent move, so the filter is a quality one as much as a size one.
+
 To regenerate the model from the engine repo:
 
 ```
@@ -76,16 +115,25 @@ BASE=http://localhost:8090 ./scripts/e2e.sh   # still passes
 
 Games survive instance death because no instance owns a game: state lives in Redis, and move events reach every browser through pub/sub regardless of which replica holds its WebSocket.
 
-## Load test
+## Load tests
 
-`loadtest/game_flow.js` drives real games: create, subscribe over the same WebSocket a browser uses, play a move, wait for the engine's reply, resign. Move latency is measured from the move request to the reply arriving on the socket, so it covers the whole path rather than a polling interval.
+Two, because the site has two halves and they break for different reasons.
 
-Two scenarios. `steady` holds a constant arrival rate to measure latency at a load the fleet can carry; `ramp` climbs past saturation to find the ceiling and give the worker autoscaling policy something to react to.
+`loadtest/game_flow.js` drives real games: create, subscribe over the same WebSocket a browser uses, play a move, wait for the engine's reply, resign. Move latency is measured from the move request to the reply arriving on the socket, so it covers the whole path rather than a polling interval. `steady` holds a constant arrival rate; `ramp` climbs past saturation to find the ceiling and give the worker autoscaling policy something to react to.
 
 ```
 k6 run -e BASE=http://<alb-dns> -e SCENARIO=steady -e RATE=1.5 loadtest/game_flow.js
 k6 run -e BASE=http://<alb-dns> -e SCENARIO=ramp   -e PEAK=2   loadtest/game_flow.js
 ```
+
+`loadtest/puzzles.js` measures the search. `MIX` picks which population of filters to send, and the two answer different questions. `real` is what the site is asked for: the filter panel opens empty, so most fetches carry no filter at all. `stress` sends a theme on nearly every request, which is the expensive path described above. Reporting only the stress number understates the site and reporting only the real number hides the cliff, so run both.
+
+```
+k6 run -e BASE=https://blundernet.com -e MIX=real   -e RATE=5 -e DURATION=45s loadtest/puzzles.js
+k6 run -e BASE=https://blundernet.com -e MIX=stress -e RATE=2 -e DURATION=45s loadtest/puzzles.js
+```
+
+One search returns a batch of ten that the browser queues and works through, so five searches a second is fifty puzzles a second of solving.
 
 ### Results
 
@@ -116,7 +164,9 @@ workers               1 -> 4, triggered at t+467 s
 
 Three things worth reading out of that. The API never failed or slowed under three times the load the engine could absorb, because nothing in the request path waits on inference: the queue takes the overflow and the cost lands on move latency instead of errors. Autoscaling did resolve the backlog, clearing 113 queued moves within about ninety seconds of the new tasks starting. But it took roughly five minutes to react at all, because SQS publishes queue depth once a minute and target tracking wants several breaching points before it moves. For a workload where a player is watching the board, that is too slow to be the only defence; provisioning closer to peak, or stepping on a shorter metric, would matter more than the scaling policy itself.
 
-The bottleneck is the engine, not the platform. Each move costs about 1.6 s of CPU on a 0.5 vCPU task, so one worker sustains roughly 0.6 moves/s and four sustain about 2.4. Raising simulations, task CPU, or batching leaf evaluations inside a search all move that number; none of them touch the API.
+The bottleneck for games is the engine, not the platform. Each move costs about 1.6 s of CPU on a 0.5 vCPU task, so one worker sustains roughly 0.6 moves/s and four sustain about 2.4. Raising simulations, task CPU, or batching leaf evaluations inside a search all move that number; none of them touch the API.
+
+The bottleneck for puzzles is the disk on the single box, which is the section above.
 
 ## What it promises
 
@@ -131,6 +181,8 @@ Four targets, measured over a calendar month. They are deliberately set where th
 
 99% allows about seven hours of downtime a month, which is a weak number and an honest one. The always-on deployment is a single instance, so a reboot, a bad deploy, or the host going away is a full outage with nothing to fail over to. Promising 99.9% would need a second instance and a load balancer, which is the reference stack, which is the thing that costs $60 a month rather than $10. Availability here is a budget decision, not an engineering one, and quoting three nines off a single box would be the kind of number that falls apart the first time someone asks how.
 
+There is deliberately no puzzle search target yet. The number would be honest only for the filter mix I chose to measure, and the spread between the two mixes is wide enough that one figure would hide more than it told.
+
 The latency target covers `/api/` only. Serving the frontend bundle and holding WebSocket connections are different jobs: a WebSocket lives as long as the game, so timing it measures how long someone played rather than how fast the service answered.
 
 The engine target is the one under real pressure. A move costs about 1.6 s of CPU, so a single worker sustains roughly 0.6 moves a second. Past that, the queue absorbs the overflow and the cost lands on move latency instead of errors, which is the tradeoff the architecture was built to make. It also means the engine target breaks well before the API one does, and it breaks first for whoever is unlucky enough to be playing at the time.
@@ -139,13 +191,19 @@ The engine target is the one under real pressure. A move costs about 1.6 s of CP
 
 Availability is the one target the service cannot measure about itself, since a process that is down cannot report that it is down. `.github/workflows/uptime.yml` probes `/api/status` from outside AWS every ten minutes and fails the run after two consecutive bad responses. It stays inert until the `SITE_URL` repository variable is set. GitHub's scheduled runners are best effort, though: runs queue, arrive late, and stop entirely after 60 days of repo inactivity, so this is a backstop with a record in the Actions log rather than a pager.
 
+## Backups
+
+`pg_dump` piped through gzip to S3 on a systemd timer at 03:15 UTC, 30 day lifecycle, bucket private and encrypted, instance role scoped to that one bucket. A dump rather than an EBS snapshot because a 220MB gzip of SQL restores into any Postgres, including a laptop, which is what makes it testable.
+
+It was tested rather than assumed: the latest dump was pulled from S3 and restored into a scratch database on the box, coming back with the right user, game, puzzle and cell counts, then dropped. The script and the systemd units live in the Terraform boot script rather than having been installed by hand, so a replaced instance comes back with its backups running. A backup that exists because somebody remembered to set it up once is not a backup.
+
 ## Two deployments, on purpose
 
 The repo ships two stacks, because the architecture worth designing and the architecture worth paying for every month are not the same thing.
 
 `deploy/terraform` is the reference design: an autoscaling api fleet behind an ALB, workers scaled on queue depth, ElastiCache, RDS. It is what the system should look like under load, it has been deployed and exercised end to end, and it costs roughly $60 a month to leave running. So it goes up on demand and comes down after.
 
-`deploy/demo` is the version cheap enough to leave running: one t4g.micro with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $10 a month. Same code, same queue semantics, a tenth of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. `deploy/demo` is what serves blundernet.com today.
+`deploy/demo` is the version cheap enough to leave running: one t4g.micro with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $11 a month. Same code, same queue semantics, a tenth of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. `deploy/demo` is what serves blundernet.com today.
 
 ```
 make demo-deploy    # build arm64 images, push, stand up the box
@@ -170,13 +228,20 @@ Terraform creates the VPC, ALB, ECS cluster and services, ElastiCache, RDS, the 
 
 ```
 cmd/api, cmd/worker      the two binaries
+cmd/puzzleload           streaming importer for the Lichess CC0 dump
 internal/game            chess domain: move lists, legality, outcomes
 internal/engine          board encoding, ONNX inference, fallback searcher
-internal/store           Redis (live state, CAS, pub/sub) and Postgres (archive)
+internal/puzzle          puzzle domain: themes, phases, solution lengths
+internal/rating          Glicko-2, for players and puzzles alike
+internal/store           Redis (live state, CAS, pub/sub) and Postgres (archive, puzzles)
 internal/queue           SQS client, ElasticMQ-compatible for local dev
 internal/httpapi         REST + WebSocket handlers, embedded frontend
 internal/obs             JSON logging, Prometheus metrics, HTTP middleware
+internal/testdb          a schema per test package, so packages stop truncating each other
 web/                     React frontend, built into the api binary
 deploy/terraform         the AWS stack
-loadtest/                k6 scenario
+deploy/demo              the one-box stack that serves the site
+loadtest/                k6 scenarios: game flow and puzzle search
 ```
+
+The puzzle data is Lichess's, used under CC0.
