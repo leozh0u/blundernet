@@ -1,0 +1,7 @@
+[Unit]
+Description=Back up the BlunderNet database to S3
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/blundernet/backup.sh

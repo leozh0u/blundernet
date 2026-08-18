@@ -175,6 +175,69 @@ resource "aws_instance" "demo" {
   })
 }
 
+# The account id, which the backup bucket name needs: S3 names are global, so
+# "blundernet-backups" on its own would collide with anybody else's.
+data "aws_caller_identity" "current" {}
+
+# Where the nightly database dump goes. Lifecycle rather than a cron that
+# deletes old files: expiry is the bucket's job and it keeps working even if
+# the instance is gone, which is exactly the case a backup is for.
+resource "aws_s3_bucket" "backups" {
+  bucket = "blundernet-backups-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket_public_access_block" "backups" {
+  bucket                  = aws_s3_bucket.backups.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
+  bucket = aws_s3_bucket.backups.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "backups" {
+  bucket = aws_s3_bucket.backups.id
+  rule {
+    id     = "expire-30-days"
+    status = "Enabled"
+    filter {
+      prefix = "pg/"
+    }
+    expiration {
+      days = 30
+    }
+  }
+}
+
+# Write access to that one bucket and nothing else.
+resource "aws_iam_role_policy" "backups" {
+  name = "backups"
+  role = aws_iam_role.instance.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.backups.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.backups.arn
+      },
+    ]
+  })
+}
+
 # Postgres data lives here rather than on the root volume, because the root
 # volume dies with the instance and every boot-script change replaces the
 # instance. Losing the accounts and game history on a config edit is not a
