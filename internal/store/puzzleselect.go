@@ -47,10 +47,16 @@ type cell struct {
 	n     int64
 }
 
-// candidatesPerScan is how many rows a single cell scan asks for. Bigger than
-// the caller usually wants, because rows are dropped afterwards for being
-// already seen, and a second round trip costs more than a few extra rows.
-const candidatesPerScan = 32
+// candidatesPerScan is how many rows a single cell scan asks for. A little
+// over the batch the drill asks for, because rows are dropped afterwards for
+// being already seen and a second round trip costs more than a few spare rows.
+//
+// It was 32, and on this box that was the difference between working and not.
+// A themed scan walks the shuffle rechecking the theme against the heap, and
+// the common themes sit about one row in ten to one in thirty-six, so the rows
+// walked scale with this number and every one of them is a random page. A
+// skewer scan measured 885 pages at 32 and 272 at 12.
+const candidatesPerScan = 12
 
 // maxScans bounds the work one Select can do. A filter that matches almost
 // nothing must fail fast rather than walk every cell it was given.
