@@ -8,6 +8,20 @@
 // Each iteration is one drill fetch, with the filters a real session sends
 // rather than the same query every time. Repeating one query would measure the
 // page cache; the point is to measure the sampler across the corpus.
+//
+// MIX picks which population of filters to send, and the two answer different
+// questions.
+//
+//   MIX=real   (default) what the site is actually asked for. The filter panel
+//              starts empty, so most fetches carry no filter at all, and a
+//              theme is something a minority of sessions clicks into.
+//   MIX=stress a theme on nearly every request. This is the expensive path:
+//              the theme is a recheck against the heap, common themes sit
+//              about one row in ten to one in thirty-six, so the scan walks
+//              tens of random pages per puzzle it keeps.
+//
+// Reporting only the stress number understates the site, and reporting only
+// the real number hides the cliff. Run both.
 
 import http from 'k6/http'
 import { check } from 'k6'
@@ -16,6 +30,7 @@ import { Trend } from 'k6/metrics'
 const BASE = __ENV.BASE || 'http://localhost:8080'
 const RATE = Number(__ENV.RATE) || 10 // searches per second
 const DURATION = __ENV.DURATION || '1m'
+const MIX = __ENV.MIX || 'real'
 
 const searchLatency = new Trend('puzzle_search_latency', true)
 
@@ -45,11 +60,26 @@ const PHASES = ['', 'opening', 'middlegame', 'endgame']
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)]
 
+// realFilter models a session rather than a permutation. The panel opens
+// empty and most fetches are the refill behind the queue, so the common case
+// is no filter at all. The shares below are a judgement, not a measurement:
+// there is no analytics on the site yet, so they are set from what the UI
+// makes easy rather than from what people did.
+function realFilter() {
+  const r = Math.random()
+  if (r < 0.55) return { band: [0, 0], moves: 0, theme: '', phase: '' } // untouched panel
+  if (r < 0.75) return { band: pick(BANDS), moves: 0, theme: '', phase: '' } // rating only
+  if (r < 0.90) return { band: pick(BANDS), moves: pick(MOVES), theme: '', phase: pick(PHASES) }
+  return { band: pick(BANDS), moves: pick(MOVES), theme: pick(THEMES.slice(1)), phase: pick(PHASES) }
+}
+
+// stressFilter is every knob turned at once, theme included on 7 of 8.
+function stressFilter() {
+  return { band: pick(BANDS), moves: pick(MOVES), theme: pick(THEMES), phase: pick(PHASES) }
+}
+
 export default function () {
-  const band = pick(BANDS)
-  const moves = pick(MOVES)
-  const theme = pick(THEMES)
-  const phase = pick(PHASES)
+  const { band, moves, theme, phase } = MIX === 'stress' ? stressFilter() : realFilter()
 
   const q = ['limit=10']
   if (band[0]) q.push(`rating_min=${band[0]}`)
