@@ -403,6 +403,39 @@ having been installed by hand, so a replaced instance comes back with backups
 running. A backup that exists because somebody remembered to set it up once is
 not a backup.
 
+### The launch check that said no
+
+Before putting the site in front of anyone, the puzzle search was load tested
+against production with k6 (`loadtest/puzzles.js`, random filters rather than
+one repeated query, or it would only measure the page cache).
+
+| searches per second | median | p95 | failures |
+|---|---|---|---|
+| 1 (single request) | 240ms | | 0% |
+| 2 | 169ms | 3.5s | 0% |
+| 5 | 1.1s | 19.4s | 0% |
+| 10 | | 49s | 3% |
+
+The first run failed 86% of requests, and that turned out to be the rate
+limiter rather than capacity: the puzzle bucket was 30 burst and 1 per second,
+keyed by address for signed-out visitors, so one office or one university would
+share a single request a second between everybody in it. Now 60 and 5.
+
+With that out of the way the real ceiling showed up, and `iostat` named it in
+one line: **2,599 reads a second, 21MB/s, 92% disk utilization**, with Postgres
+sitting in `DataFileRead` and the CPU almost idle. The search is I/O bound, not
+CPU bound. The corpus is 1.5GB of heap on a box with 910MB of memory, and the
+sampler reads random rows by design, so nearly every request is a cold read
+against a gp3 volume whose baseline is 3,000 IOPS.
+
+Worth knowing which of those numbers is the wall: it is not the instance size
+in the usual sense. CPU credits were full the whole time.
+
+The cheap fixes are all about reading fewer bytes: a smaller corpus, fewer
+candidate rows per scan, and not selecting columns the drill does not show
+until you ask for them. The expensive fix is a box with enough memory to cache
+the working set, which is a different monthly bill.
+
 ---
 
 ## Bugs that were caught, and how
