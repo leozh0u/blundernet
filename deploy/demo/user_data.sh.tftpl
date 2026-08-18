@@ -65,6 +65,21 @@ cat >/opt/blundernet/compose.yaml <<'COMPOSE'
 services:
   postgres:
     image: postgres:17-alpine
+    # Tuned for the box rather than for a default machine. effective_cache_size
+    # of 4GB told the planner the whole corpus was cached when only about
+    # 400MB ever is, and random_page_cost of 4 is priced for a spinning disk
+    # rather than gp3. Found by load testing the puzzle search, which is I/O
+    # bound here: 2,599 reads a second at 92% disk utilization.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=192MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - maintenance_work_mem=64MB
     restart: unless-stopped
     environment:
       POSTGRES_USER: blundernet
@@ -94,6 +109,10 @@ services:
     environment: &appenv
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://blundernet:blundernet@postgres:5432/blundernet
+      # burst,per-second. A drill fetches ten puzzles at a time, so one person
+      # searches about once a minute, but signed-out visitors share a bucket by
+      # address and the old 30,1 throttled a whole office or campus together.
+      RATE_LIMIT_PUZZLES: 60,5
       SQS_QUEUE_URL: ${queue_url}
       AWS_REGION: ${region}
       # Caddy terminates the connection, so X-Forwarded-For here is written
