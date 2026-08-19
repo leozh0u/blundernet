@@ -206,3 +206,144 @@ func (u *Users) BotLevel(ctx context.Context, userID string) (int, error) {
 	}
 	return level, err
 }
+
+// ---------- recovery codes ----------
+
+// ErrBadRecovery covers an unknown username, a wrong code, and an account with
+// no code set. One error for all three, so the endpoint cannot be used to
+// learn which usernames exist or which accounts are recoverable.
+var ErrBadRecovery = errors.New("bad recovery code")
+
+// recoveryAlphabet is Crockford base32 without I, L, O and U: the characters
+// people confuse when copying a code off a screen by hand, and the one that
+// makes accidental words. 26 characters from this set is about 120 bits.
+const (
+	recoveryAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	recoveryLen      = 25 // five groups of five
+	recoveryGroup    = 5
+)
+
+// newRecoveryCode returns a code for the user to keep and the hash to store.
+// The plaintext is returned exactly once and never persisted: if it could be
+// read back later it would be a second password sitting in the database.
+func newRecoveryCode() (code string, hash string, err error) {
+	buf := make([]byte, recoveryLen)
+	if _, err := rand.Read(buf); err != nil {
+		return "", "", err
+	}
+	out := make([]byte, 0, recoveryLen+recoveryLen/recoveryGroup)
+	for i, b := range buf {
+		if i > 0 && i%recoveryGroup == 0 {
+			out = append(out, '-')
+		}
+		// Modulo bias is negligible here: 256 over a 32 character alphabet
+		// divides exactly, so every character stays equally likely.
+		out = append(out, recoveryAlphabet[int(b)%len(recoveryAlphabet)])
+	}
+	code = string(out)
+	// Hash the normalised form, not the pretty one. The dashes are there to
+	// make the code readable off a screen and the user may or may not type
+	// them, so the thing that gets hashed has to be the thing verification
+	// will produce: upper case, alphabet characters only.
+	hash, err = hashPassword(normaliseCode(code))
+	return code, hash, err
+}
+
+// normaliseCode makes the code survive being typed by a human: case is
+// ignored, and the grouping dashes and any stray spaces are cosmetic.
+func normaliseCode(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(s) {
+		if strings.ContainsRune(recoveryAlphabet, r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// SetRecoveryCode issues a fresh code for an account and returns the plaintext
+// for the caller to show once. Used at signup, when a guest upgrades, and
+// again after a code is spent.
+func (u *Users) SetRecoveryCode(ctx context.Context, userID string) (string, error) {
+	code, hash, err := newRecoveryCode()
+	if err != nil {
+		return "", err
+	}
+	tag, err := u.pool.Exec(ctx,
+		"UPDATE users SET recovery_hash = $2, recovery_used_at = NULL WHERE id = $1 AND NOT is_guest",
+		userID, hash)
+	if err != nil {
+		return "", err
+	}
+	if tag.RowsAffected() == 0 {
+		return "", ErrNotFound
+	}
+	return code, nil
+}
+
+// RecoverWithCode verifies a recovery code and sets a new password. It returns
+// the user and a replacement code, because spending a code has to retire it:
+// otherwise a code seen once over a shoulder or left in a screenshot keeps
+// working forever.
+//
+// The whole thing is one transaction. A crash between checking the code and
+// writing the password must not leave the account with a spent code and the
+// old password still live.
+func (u *Users) RecoverWithCode(ctx context.Context, username, code, newPassword string) (*User, string, error) {
+	tx, err := u.pool.Begin(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var id, name string
+	var stored *string
+	err = tx.QueryRow(ctx, `
+		SELECT id, username, recovery_hash FROM users
+		WHERE lower(username) = lower($1) AND NOT is_guest
+		FOR UPDATE`, username).Scan(&id, &name, &stored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", ErrBadRecovery
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	// An account from before recovery codes existed, or one whose code was
+	// cleared. Same error as a wrong code, deliberately.
+	if stored == nil {
+		return nil, "", ErrBadRecovery
+	}
+	if !verifyPassword(normaliseCode(code), *stored) {
+		return nil, "", ErrBadRecovery
+	}
+
+	passHash, err := hashPassword(newPassword)
+	if err != nil {
+		return nil, "", err
+	}
+	nextCode, nextHash, err := newRecoveryCode()
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE users SET password_hash = $2, recovery_hash = $3, recovery_used_at = now()
+		WHERE id = $1`, id, passHash, nextHash); err != nil {
+		return nil, "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, "", err
+	}
+	return &User{ID: id, Username: name}, nextCode, nil
+}
+
+// HasRecoveryCode reports whether an account has a code set, so the account
+// page can offer one to the users who predate the feature.
+func (u *Users) HasRecoveryCode(ctx context.Context, userID string) (bool, error) {
+	var has bool
+	err := u.pool.QueryRow(ctx,
+		"SELECT recovery_hash IS NOT NULL FROM users WHERE id = $1", userID).Scan(&has)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	return has, err
+}

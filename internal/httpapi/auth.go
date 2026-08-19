@@ -180,7 +180,15 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	s.startSession(w, r, user, http.StatusCreated)
+
+	// The account exists either way, so a failure to mint the code must not
+	// fail the signup. The user simply lands without one and can generate it
+	// from the account page.
+	recovery, err := s.users.SetRecoveryCode(r.Context(), user.ID)
+	if err != nil {
+		slog.Error("issue recovery code", "err", err, "user", user.ID)
+	}
+	s.startSession(w, r, user, http.StatusCreated, recovery)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -205,10 +213,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	s.startSession(w, r, user, http.StatusOK)
+	s.startSession(w, r, user, http.StatusOK, "")
 }
 
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *store.User, code int) {
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *store.User, code int, recovery string) {
 	// Rotate: destroy whatever token the request arrived with before issuing a
 	// new one. A guest token that survives the upgrade still resolves to the
 	// row that is now a credentialed account, so anyone who planted that
@@ -224,7 +232,15 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *stor
 		return
 	}
 	s.setSessionCookie(w, token, s.sessionTTL)
-	writeJSON(w, code, map[string]string{"id": user.ID, "username": user.Username})
+	body := map[string]string{"id": user.ID, "username": user.Username}
+	// The recovery code travels exactly once, on the response that minted it.
+	// It is never stored in plaintext and there is no endpoint that returns it
+	// again, so if the user closes this without saving it, it is gone and they
+	// have to generate another while still signed in.
+	if recovery != "" {
+		body["recovery_code"] = recovery
+	}
+	writeJSON(w, code, body)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -308,4 +324,82 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		next = games[len(games)-1].FinishedAt
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"games": games, "next_before": next})
+}
+
+// handleRecover takes a username and its recovery code and sets a new
+// password. This is the whole account recovery story: the site collects no
+// email, so there is no link to send and nothing to verify.
+//
+// Everything here is written to avoid telling an attacker anything. One error
+// for an unknown user, a wrong code and an account with no code, so the
+// endpoint cannot enumerate usernames or find recoverable accounts. It sits
+// behind the same rate limiter as login, because a recovery code is a
+// password by another name and guessing it is the obvious attack.
+func (s *Server) handleRecover(w http.ResponseWriter, r *http.Request) {
+	if s.users == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return
+	}
+	var body struct {
+		Username string `json:"username"`
+		Code     string `json:"code"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "body must be {\"username\": \"\", \"code\": \"\", \"password\": \"\"}")
+		return
+	}
+	// The new password is held to the signup rules. The code is not validated
+	// for shape: a malformed one simply will not verify, and saying so would
+	// hand back the format for free.
+	if len(body.Password) < minPasswordLen || len(body.Password) > maxPasswordLen {
+		httpError(w, http.StatusBadRequest, "password must be between 8 and 128 characters")
+		return
+	}
+
+	user, next, err := s.users.RecoverWithCode(r.Context(), body.Username, body.Code, body.Password)
+	if errors.Is(err, store.ErrBadRecovery) {
+		httpError(w, http.StatusUnauthorized, "wrong username or recovery code")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	// Every other session for this account dies here. Recovery is what someone
+	// reaches for when they think another person has their password, so
+	// leaving that person signed in elsewhere would defeat the point.
+	if err := s.sessions.DestroyAllFor(r.Context(), user.ID); err != nil {
+		slog.Warn("destroy sessions after recovery", "err", err, "user", user.ID)
+	}
+	s.startSession(w, r, user, http.StatusOK, next)
+}
+
+// handleNewRecoveryCode issues a replacement code for the signed-in user. It
+// covers the account that predates recovery codes and the user who lost the
+// one they were shown. Requires the current password, because otherwise a
+// borrowed session could mint a permanent way back into the account.
+func (s *Server) handleNewRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	user := UserFrom(r.Context())
+	if user == nil || user.IsGuest {
+		httpError(w, http.StatusUnauthorized, "sign in first")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "body must be {\"password\": \"\"}")
+		return
+	}
+	if _, err := s.users.Authenticate(r.Context(), user.Username, body.Password); err != nil {
+		httpError(w, http.StatusUnauthorized, "wrong password")
+		return
+	}
+	code, err := s.users.SetRecoveryCode(r.Context(), user.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"recovery_code": code})
 }

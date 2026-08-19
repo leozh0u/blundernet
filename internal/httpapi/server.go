@@ -103,6 +103,10 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /version", s.handleVersion)
 	mux.HandleFunc("POST /api/auth/signup", s.limit("auth", s.limits.Auth, s.handleSignup))
 	mux.HandleFunc("POST /api/auth/login", s.limit("auth", s.limits.Auth, s.handleLogin))
+	// Same limiter as login: a recovery code is a bearer credential and
+	// guessing it is the obvious attack on this endpoint.
+	mux.HandleFunc("POST /api/auth/recover", s.limit("auth", s.limits.Auth, s.handleRecover))
+	mux.HandleFunc("POST /api/auth/recovery-code", s.limit("auth", s.limits.Auth, s.handleNewRecoveryCode))
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", s.handleMe)
 	mux.HandleFunc("POST /api/games", s.limit("create", s.limits.CreateGame, s.handleCreate))

@@ -38,6 +38,18 @@ func sessionKey(token string) string {
 	return "session:" + base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
+// Sessions are keyed by token, which answers "who is this?" but not "what
+// else is signed in as me?". Recovery needs the second question: someone
+// resetting a password they think was stolen has to be able to throw the
+// thief out, and that means reaching sessions whose tokens the server never
+// keeps. So each user also gets a set of their own session keys.
+//
+// The set is an index, not a source of truth. Members can outlive the
+// sessions they name, because a session key expires on its own and Redis does
+// not remove it from the set. That costs nothing: deleting a key that has
+// already expired is a no-op, and the set expires on its own schedule too.
+func userSessionsKey(userID string) string { return "usersessions:" + userID }
+
 // Create returns the token to hand to the client. It is the only time the
 // token exists outside the cookie.
 func (s *Sessions) Create(ctx context.Context, userID string) (string, error) {
@@ -46,7 +58,15 @@ func (s *Sessions) Create(ctx context.Context, userID string) (string, error) {
 		return "", err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
-	if err := s.rdb.Set(ctx, sessionKey(token), userID, s.ttl).Err(); err != nil {
+	key := sessionKey(token)
+	// One round trip for both writes. The index is allowed to be slightly
+	// wrong (see userSessionsKey) but it is not allowed to miss a live
+	// session, so it is written in the same pipeline rather than after.
+	pipe := s.rdb.TxPipeline()
+	pipe.Set(ctx, key, userID, s.ttl)
+	pipe.SAdd(ctx, userSessionsKey(userID), key)
+	pipe.Expire(ctx, userSessionsKey(userID), s.ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
 		return "", err
 	}
 	return token, nil
@@ -71,5 +91,36 @@ func (s *Sessions) Lookup(ctx context.Context, token string) (string, error) {
 }
 
 func (s *Sessions) Destroy(ctx context.Context, token string) error {
-	return s.rdb.Del(ctx, sessionKey(token)).Err()
+	key := sessionKey(token)
+	// Read the owner before deleting, so the index entry goes too. If the
+	// session has already expired there is nothing to tidy and nothing to do.
+	userID, err := s.rdb.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	pipe := s.rdb.TxPipeline()
+	pipe.Del(ctx, key)
+	pipe.SRem(ctx, userSessionsKey(userID), key)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+// DestroyAllFor signs a user out everywhere. Used by account recovery, where
+// the whole point is that somebody else may be holding a live session.
+func (s *Sessions) DestroyAllFor(ctx context.Context, userID string) error {
+	idx := userSessionsKey(userID)
+	keys, err := s.rdb.SMembers(ctx, idx).Result()
+	if err != nil {
+		return err
+	}
+	pipe := s.rdb.TxPipeline()
+	if len(keys) > 0 {
+		pipe.Del(ctx, keys...)
+	}
+	pipe.Del(ctx, idx)
+	_, err = pipe.Exec(ctx)
+	return err
 }
