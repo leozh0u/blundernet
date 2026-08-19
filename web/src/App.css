@@ -294,6 +294,15 @@ button {
   transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.15s ease;
 }
 
+/* Hover lifts, press pushes down. The shadow already shortens on click, so
+   growing it on hover completes the same metaphor rather than inventing a
+   second one: the button rises to meet the cursor and goes down when used.
+   A tint alone was too quiet to read as an invitation. */
+.choice:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 7px 0 var(--line-strong);
+}
+
 .choice:active {
   transform: translateY(3px);
   box-shadow: 0 1px 0 var(--line-strong);
@@ -314,8 +323,11 @@ button {
   box-shadow: 0 4px 0 var(--seat-light-shadow);
 }
 
+/* The light face brightens to near-white and keeps its own shadow colour, so
+   the lift reads on a pale button as clearly as on a dark one. */
 .choice.light:hover {
   background: var(--seat-light-hover);
+  box-shadow: 0 7px 0 var(--seat-light-shadow);
 }
 
 .choice.light:active {
@@ -332,9 +344,13 @@ button {
   box-shadow: 0 4px 0 var(--line-strong);
 }
 
+/* The dark face has less room to brighten before it stops looking black, so
+   it borrows the accent on its edge instead. That is the one place the accent
+   is allowed outside a primary action: it marks the thing under the cursor. */
 .choice.dark:hover {
   background: var(--seat-dark-hover);
-  border-color: var(--ink-faint);
+  border-color: var(--blue);
+  box-shadow: 0 7px 0 var(--blue-shadow);
 }
 
 .choice.dark:active {
