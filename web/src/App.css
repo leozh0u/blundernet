@@ -1675,3 +1675,15 @@ button {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
+/* The generate form on the account page. Narrow on purpose: it asks for one
+   thing, and a full-width password field on a wide card reads as a form with
+   more of itself off screen. */
+.recovery-gen {
+  max-width: 22rem;
+}
+
+.recovery-gen label {
+  display: block;
+  margin-bottom: 0.5rem;
+}

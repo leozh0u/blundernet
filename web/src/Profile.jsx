@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { auth } from './auth.js'
+import RecoverySection from './RecoverySection.jsx'
 
 // The account page. It exists because the site now keeps four numbers about
 // you, and a bare "1500" in the corner of the header says none of them: two
@@ -9,15 +11,18 @@ const fmt = (n) => (n === null || n === undefined ? '...' : Math.round(n))
 
 export default function Profile({ onDrill }) {
   const [profile, setProfile] = useState(null)
+  const [user, setUser] = useState(null)
   const [games, setGames] = useState([])
   const [loaded, setLoaded] = useState(false)
 
   const load = useCallback(async () => {
-    const [p, g] = await Promise.all([
+    const [p, g, u] = await Promise.all([
       fetch('/api/me/profile').then((r) => (r.ok ? r.json() : null)),
       fetch('/api/me/games?limit=8').then((r) => (r.ok ? r.json() : [])),
+      auth.me(),
     ])
     setProfile(p)
+    setUser(u)
     setGames(Array.isArray(g) ? g : g?.games || [])
     setLoaded(true)
   }, [])
@@ -124,6 +129,8 @@ export default function Profile({ onDrill }) {
           </div>
         </div>
       </div>
+
+      {!guest && <RecoverySection user={user} />}
 
       <div className="card">
         <h2>Recent games</h2>
