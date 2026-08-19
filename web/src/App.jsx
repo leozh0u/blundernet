@@ -9,6 +9,7 @@ import Profile from './Profile.jsx'
 import Streak from './Streak.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
 import Logo from './Logo.jsx'
+import { sound } from './sound.js'
 
 const api = {
   async createGame(color, mode, level) {
@@ -74,6 +75,25 @@ function wsURL(id) {
 
 const other = (c) => (c === 'white' ? 'black' : 'white')
 
+// soundForLastMove works out what the move that just arrived actually did.
+// The socket sends a position and a move list, not "this was a capture", so
+// the move is replayed against the position before it to find out.
+function soundForLastMove(prev, next) {
+  const uci = next.moves[next.moves.length - 1]
+  if (!uci) return
+  try {
+    const board = new Chess(prev.fen)
+    const mv = board.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      promotion: uci[4] || undefined,
+    })
+    sound.forMove(mv, board)
+  } catch {
+    // A position the client cannot replay is not worth a sound or an error.
+  }
+}
+
 // The API speaks UCI; players read algebraic. Replay the game to convert.
 function movePairs(moves) {
   const board = new Chess()
@@ -137,6 +157,27 @@ const PATHS = {
   streak: '/puzzles/streak',
   play: '/play',
   me: '/me',
+}
+
+// The sound switch. Sound defaults on because a chess board that clicks is
+// what people expect, and it is one click and a remembered preference to turn
+// off. Rendered as a real button with pressed state rather than an icon, so it
+// says what it will do rather than needing to be guessed at.
+function SoundToggle() {
+  const [on, setOn] = useState(sound.enabled())
+  return (
+    <button
+      type="button"
+      className="link quiet"
+      aria-pressed={on}
+      onClick={() => {
+        sound.setEnabled(!on)
+        setOn(!on)
+      }}
+    >
+      {on ? 'Sound on' : 'Sound off'}
+    </button>
+  )
 }
 
 export default function App() {
@@ -235,6 +276,12 @@ export default function App() {
       }
       setHint(null)
       setState((prev) => {
+        // The opponent's move arrives here, so this is where it gets a sound.
+        // Replaying the last move against the previous position is what tells
+        // a capture from a quiet move, and the socket carries neither.
+        if (prev && next.moves.length > prev.moves.length) {
+          soundForLastMove(prev, next)
+        }
         if (next.status === 'finished' && prev?.status !== 'finished') {
           // The rating is written by whichever service archives the game, so
           // give that write a moment to land before asking for the new number.
@@ -281,6 +328,7 @@ export default function App() {
     }
     if (!mv) return false
     setSelected(null)
+    sound.forMove(mv, probe)
     setState({ ...state, fen: probe.fen(), turn: other(state.turn) })
     api.move(state.id, from + to + (mv.promotion ? 'q' : '')).then(({ ok, body }) => {
       if (!ok) {
@@ -723,6 +771,8 @@ export default function App() {
       {error && <div className="error">{error}</div>}
 
       <footer className="foot">
+        <SoundToggle />
+        <span aria-hidden="true"> · </span>
         <a href="https://github.com/leozh0u/blundernet">Source</a>
         <span aria-hidden="true"> · </span>
         <a href="https://github.com/leozh0u/blundernet-engine">The engine</a>

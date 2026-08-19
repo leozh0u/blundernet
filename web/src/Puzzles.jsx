@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import BoardOverlay from './BoardOverlay.jsx'
+import { sound } from './sound.js'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -360,6 +361,7 @@ export default function Puzzles({ shared }) {
     const right = uciOf(mv) === want || probe.isCheckmate()
     setVerdict({ square: to, good: right })
     if (!right) {
+      sound.fail()
       setBoard(probe)
       setPhase('failed')
       record(puzzle.id, false, hintsUsed.current)
@@ -380,11 +382,12 @@ export default function Puzzles({ shared }) {
     const want = puzzle.solution[step]
     later(() => setVerdict(null), 900)
     const played = new Chess(board.fen())
-    played.move({
+    const mv = played.move({
       from: want.slice(0, 2),
       to: want.slice(2, 4),
       promotion: want[4] || undefined,
     })
+    sound.forMove(mv, played)
     setBoard(played)
     setHintLevel(0)
 
@@ -392,6 +395,7 @@ export default function Puzzles({ shared }) {
     if (nextStep >= puzzle.solution.length) {
       setStep(nextStep)
       setPhase('solved')
+      sound.solve()
       record(puzzle.id, true, hintsUsed.current)
       return
     }

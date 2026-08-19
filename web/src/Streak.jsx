@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
+import { sound } from './sound.js'
 import BoardOverlay from './BoardOverlay.jsx'
 
 // Streak. Puzzles get harder until you miss one, and then the run is over.

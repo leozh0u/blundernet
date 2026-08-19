@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
+import { sound } from './sound.js'
 import BoardOverlay from './BoardOverlay.jsx'
 
 // Ranked mode. One puzzle at your level, no filters, no hints, no second try,
@@ -148,6 +149,8 @@ export default function Ranked() {
     }
     const body = await res.json()
     setVerdict({ square: uci.slice(2, 4), good: body.correct })
+    if (body.done) sound[body.correct ? 'solve' : 'fail']()
+    else if (body.correct) sound.move()
 
     if (body.correct && !body.done) {
       // The reply is forced, so it is played rather than announced.
