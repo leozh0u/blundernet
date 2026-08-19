@@ -269,9 +269,12 @@ export default function Ranked() {
               <span className="head">
                 {puzzle.color === 'white' ? 'White' : 'Black'} to play
               </span>
-              <span className="hint">
-                {puzzle.moves === 1 ? 'One move' : `${puzzle.moves} moves`}
-              </span>
+              {/* No solution length here on purpose. Knowing it is two moves
+                  tells you when to stop calculating, and ranked is meant to
+                  measure you rather than help you. Learning mode still shows
+                  it. The server does not send it either, so this is not a
+                  matter of the client choosing to be discreet. */}
+              <span className="hint">Find the best move</span>
             </>
           )}
           {phase === 'done' && (

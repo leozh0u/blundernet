@@ -262,9 +262,21 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"user": nil})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": map[string]any{
-		"id": user.ID, "username": user.Username, "guest": user.IsGuest,
-	}})
+	out := map[string]any{"id": user.ID, "username": user.Username, "guest": user.IsGuest}
+	// Whether a recovery code exists, so the account page can tell the
+	// accounts that predate the feature apart from the ones already covered.
+	// Only whether, never the code: it exists in plaintext exactly once, on
+	// the response that minted it.
+	if !user.IsGuest && s.users != nil {
+		has, err := s.users.HasRecoveryCode(r.Context(), user.ID)
+		if err != nil {
+			// Not worth failing the whole call. The page falls back to
+			// offering a code, which is harmless if one already exists.
+			slog.Warn("read recovery state", "err", err, "user", user.ID)
+		}
+		out["has_recovery"] = has
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": out})
 }
 
 // readIdentity resolves the caller without creating anything. Read routes use

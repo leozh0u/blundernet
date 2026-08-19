@@ -29,6 +29,20 @@ export const auth = {
   signup: (username, password) => post('/api/auth/signup', { username, password }),
   login: (username, password) => post('/api/auth/login', { username, password }),
   logout: () => post('/api/auth/logout'),
+
+  // Account recovery without email. The code is a bearer credential, so these
+  // go through the same rate limiter as login.
+  recover: (username, code, password) => post('/api/auth/recover', { username, code, password }),
+  newRecoveryCode: (password) => post('/api/auth/recovery-code', { password }),
+}
+
+// The server accepts a code in any case and ignores the grouping dashes, so
+// the field can be forgiving too. Kept here as well as on the server because
+// showing the user their own input tidied up is a better signal than silently
+// accepting a mess.
+export function tidyRecoveryCode(raw) {
+  const chars = raw.toUpperCase().replace(/[^0-9A-HJKMNP-TV-Z]/g, '').slice(0, 25)
+  return chars.replace(/(.{5})(?=.)/g, '$1-')
 }
 
 // Ratings are float64 on the wire because Glicko-2 works in fractions. Nobody

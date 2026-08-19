@@ -32,8 +32,16 @@ type rankedView struct {
 	FEN       string `json:"fen"`
 	SetupMove string `json:"setup_move"`
 	Color     string `json:"color"`
-	Moves     int    `json:"moves"`
 	Step      int    `json:"step"`
+	// The solution length is deliberately absent, for the same reason as the
+	// rating below it. "Two moves" tells the solver when to stop looking, and
+	// a mate in two is a different exercise once you have been told it is a
+	// mate in two. Learning mode still shows it, because there the point is to
+	// study a known shape rather than to be measured.
+	//
+	// Left out of the payload rather than hidden in the client: a number the
+	// browser receives is a number the solver can read.
+	//
 	// The puzzle's rating is deliberately absent until the attempt is over.
 	// Seeing "2100" before starting changes how hard somebody tries, and the
 	// number is supposed to be measuring them rather than the other way round.
@@ -142,7 +150,7 @@ func (s *Server) drawRanked(r *http.Request, rating int, seen map[string]bool) (
 func toRankedView(p puzzle.Puzzle, step int) rankedView {
 	return rankedView{
 		ID: p.ID, FEN: p.FEN, SetupMove: p.SetupMove(), Color: p.SolverColor(),
-		Moves: p.UserMoves(), Step: step,
+		Step: step,
 	}
 }
 
