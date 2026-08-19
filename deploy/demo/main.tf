@@ -1,5 +1,5 @@
 # Always-on public demo: one small ARM instance running the same
-# containers, with real SQS behind it. Costs about $10/month, versus
+# containers, with real SQS behind it. Costs about $17/month, versus
 # roughly $60 for the autoscaling stack in ../terraform. The full
 # architecture stays the reference design and is deployed on demand;
 # this exists so the public link never goes dark.
@@ -53,7 +53,24 @@ variable "domain" {
   default = "blundernet.com"
 }
 
-data "aws_ami" "al2023" {
+# The AMI is pinned rather than resolved, because most_recent = true made this
+# a moving target: Amazon publishes a new AL2023 image every few weeks, the
+# data source picked it up, and the next apply for any unrelated reason wanted
+# to replace the instance. An instance replacement is a real event here, and it
+# should happen when someone decides to, not when Amazon ships.
+#
+# To move it, run the data source below and paste the id in. Doing that
+# deliberately is the point: it is a reboot and it wants a look afterwards.
+variable "ami_id" {
+  type        = string
+  description = "AL2023 arm64 AMI. Pinned so Amazon's release schedule cannot replace the box."
+  default     = "ami-05ef6b18a1368e9b0" # al2023-ami-2023.12.20260817.0-kernel-6.12-arm64
+}
+
+# Kept for finding the current image without hunting through the console:
+#   terraform console
+#   > data.aws_ami.al2023_latest.id
+data "aws_ami" "al2023_latest" {
   most_recent = true
   owners      = ["amazon"]
   filter {
@@ -151,7 +168,7 @@ resource "aws_security_group" "web" {
 }
 
 resource "aws_instance" "demo" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = var.ami_id
   instance_type          = var.instance_type
   iam_instance_profile   = aws_iam_instance_profile.instance.name
   vpc_security_group_ids = [aws_security_group.web.id]
@@ -244,7 +261,7 @@ resource "aws_iam_role_policy" "backups" {
 # trade worth making for one less resource.
 resource "aws_ebs_volume" "data" {
   availability_zone = aws_instance.demo.availability_zone
-  size              = 8
+  size              = 16
   type              = "gp3"
   encrypted         = true
 
