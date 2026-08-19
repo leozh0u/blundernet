@@ -24,6 +24,10 @@ The engine repo answers "can I train a model?" This repo answers a different que
 
 **Play a friend** over a link, unrated. **Post-game review** flags the worst moves using the value head plus material.
 
+**Accounts recover without email.** The site collects no email address, so there is no reset link to send. Every account gets one recovery code at signup instead, shown once and stored as an Argon2id hash, in the same format and with the same parameters as a password. Spending a code retires it and signs out every other session, because recovery is what somebody reaches for when they think another person has their password.
+
+**The board has sound**, synthesised with the Web Audio API rather than sampled. Recorded clicks would mean a licence that permits commercial redistribution, hosting, and a few hundred kilobytes on a bundle that is 100KB gzipped. A move is a short pitched knock; a capture is lower and longer; check is two rising notes. It remembers being turned off.
+
 ## Architecture
 
 ```
@@ -59,7 +63,9 @@ The first thing the load test measured, though, was the load test. It sent a the
 
 The expensive request is a themed one. A theme is a recheck against the heap rather than an index condition, and the common themes are not that common inside a cell: `skewer` is one row in 36, `backRankMate` one in 34, `mateIn2` one in 3.5. Because the scan walks the shuffle, those 36 rows are 36 random pages. Past a point the planner abandons the ordered scan for a `BitmapAnd` of the sample and theme indexes and then sorts everything to apply the limit, which measured 5,154 pages and 2.3 seconds for 32 rows. Forcing the ordered scan back on is worse, at 9,399 pages.
 
-So the scan asks for fewer rows: `candidatesPerScan` went from 32 to 12, which cuts the walk directly and keeps the planner off the bitmap. Measured over twelve real cells for each of seven themes, total pages touched went from 55,821 to 20,602.
+So the scan asks for fewer rows. It used to take a fixed 32; it now asks for what the caller still needs plus two. Measured over twelve real cells for each of seven themes, total pages touched went from 55,821 to 20,602.
+
+The fixed number was tried first and was wrong in a way worth keeping here, because it looked right. A constant smaller than the batch means one scan cannot fill the request, so the sampler draws a second cell, and cells are taken out of the pool as they are drawn. The second draw therefore comes from what is left rather than from the real distribution. Over a corpus of 1000 three-ply and 100 five-ply puzzles, asking for 25 returned 79% three-ply where the population is 91%. Deriving the limit from the outstanding request keeps the common case at one cell, drawn in proportion, which is the entire point of the design.
 
 That is the cheap lever, and it does not fix the cause. The fix that would is an index the theme can be tested against without touching the heap, and it does not fit: 73 themes over 14.8M theme-rows is the size of the corpus again. What was left was memory, which is a monthly bill rather than an engineering decision, so the box went from a t4g.micro to a t4g.small: 2GB instead of 1GB, $12.26 a month instead of $6.13. `shared_buffers` and `effective_cache_size` moved with it, since an instance size and a planner told the wrong size about it are the same change.
 
@@ -74,6 +80,8 @@ Both levers, at two searches a second, and a third column for the mix the site i
 Disk went from a flat 92% utilization to bursts between 11% and 86%, and `buff/cache` now sits at 1,426MB against a 1,365MB working set, which is the whole point: it fits. The realistic mix holds a 22 ms median at five searches a second, and one search is a batch of ten puzzles.
 
 Two honest caveats. The first row was measured on a colder cache than the last, so some of that improvement is free. And the numbers immediately after the resize were worse in the tail than before it, because a rebooted box has an empty `shared_buffers`; these are from the second pass, once it warmed.
+
+**A game id is not a credential.** Moves checked that the caller held a seat at the game; resignation did not, and `ColorFor` returned true for anybody on a game against the bot. So anyone holding an id could end somebody else's game as a loss, and a rated loss moves a real rating: a test session took a player from 1000 to 686 without ever touching the game. Ids are UUIDs, but friend game ids travel in links by design and every id sits in the address bar, so unguessability was never the protection. The seat check now lives in `ColorFor` itself, which covers both routes, and resignation resigns the caller's own colour rather than the creator's, which separately fixed a friend game bug where pressing resign handed you the win.
 
 **The api servers hold no state.** Live games exist in Redis with a 24-hour TTL, finished games in Postgres, and the servers themselves only hold WebSocket connections. Any instance can serve any request, which is what lets the fleet scale horizontally and lets a task die mid-game without the player noticing. Cross-instance WebSocket delivery works because every instance subscribes to game events over Redis pub/sub rather than keeping per-game connection registries.
 
