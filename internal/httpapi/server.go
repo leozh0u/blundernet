@@ -460,8 +460,22 @@ func (s *Server) handleResign(w http.ResponseWriter, r *http.Request) {
 		gameError(w, err)
 		return
 	}
+	// Same seat check as a move, and for the same reason. Without it anyone
+	// holding a game id could end somebody else's game as a loss, and a rated
+	// loss moves their rating: a stranger could take three hundred points off
+	// a player by posting to this route. Friend game ids travel in links by
+	// design, so "hard to guess" was never the protection here.
+	//
+	// Resigning the caller's own colour rather than g.PlayerColor also fixes
+	// the friend game case, where the second player pressing resign used to
+	// resign the first player's side and hand themselves the win.
+	color, allowed := g.ColorFor(userIDOf(r))
+	if !allowed {
+		httpError(w, http.StatusForbidden, "this is not your game")
+		return
+	}
 	prevPly := g.Ply
-	if err := g.Resign(g.PlayerColor); err != nil {
+	if err := g.Resign(color); err != nil {
 		gameError(w, err)
 		return
 	}

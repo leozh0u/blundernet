@@ -84,18 +84,32 @@ func New(id, playerColor string, level int, rated bool) *Game {
 // one side and the bot has the other; in a friend game the second seat
 // belongs to whoever opened the link first.
 func (g *Game) ColorFor(userID string) (string, bool) {
-	if !g.Friend {
-		return g.PlayerColor, true
-	}
-	switch userID {
-	case "":
+	if g.Friend {
+		switch userID {
+		case "":
+			return "", false
+		case g.UserID:
+			return g.PlayerColor, true
+		case g.OpponentID:
+			return g.EngineColor(), true
+		}
 		return "", false
-	case g.UserID:
-		return g.PlayerColor, true
-	case g.OpponentID:
-		return g.EngineColor(), true
 	}
-	return "", false
+	// A game against the bot has one seat and it belongs to whoever created
+	// it. This used to return true for anybody, on the reasoning that a bot
+	// game has no second player to protect against. That was wrong: the game
+	// id is not a credential, it appears in the address bar and in any
+	// screenshot, and a rated game against the bot moves a real rating. Anyone
+	// holding an id could move in or resign somebody else's game, and a forced
+	// resignation cost the player over three hundred points.
+	//
+	// Every game gets an owner at creation, because creating one mints a guest
+	// account when there is no session. The empty check is for rows made
+	// before that was true, where the id is the only credential the game has.
+	if g.UserID != "" && userID != g.UserID {
+		return "", false
+	}
+	return g.PlayerColor, true
 }
 
 // EngineColor returns the side the engine plays. In a friend game it is the

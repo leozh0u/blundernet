@@ -61,3 +61,49 @@ func TestFENStartAndAfterMove(t *testing.T) {
 		t.Fatal("FEN unchanged after move")
 	}
 }
+
+// A game id is not a credential. Friend game ids travel in links by design,
+// and every id sits in the address bar and in any screenshot. ColorFor is the
+// only thing standing between holding an id and moving or resigning in
+// somebody else's game, and a rated loss moves a real rating: the bug this
+// covers let an unrelated session take a player from 1000 to 686.
+func TestColorForRefusesPeopleWithoutASeat(t *testing.T) {
+	const owner, stranger, opponent = "user-owner", "user-stranger", "user-opponent"
+
+	bot := New("g1", "white", 3, true)
+	bot.UserID = owner
+
+	friend := New("g2", "white", 3, false)
+	friend.Friend = true
+	friend.UserID = owner
+	friend.OpponentID = opponent
+
+	// A game from before identities were attached at creation. The id is the
+	// only credential it has, so it keeps working rather than locking out.
+	legacy := New("g3", "white", 3, true)
+
+	cases := []struct {
+		name    string
+		game    *Game
+		user    string
+		want    string
+		allowed bool
+	}{
+		{"bot game, owner", bot, owner, "white", true},
+		{"bot game, stranger", bot, stranger, "", false},
+		{"bot game, signed out", bot, "", "", false},
+		{"friend game, first seat", friend, owner, "white", true},
+		{"friend game, second seat", friend, opponent, "black", true},
+		{"friend game, spectator", friend, stranger, "", false},
+		{"ownerless game keeps working", legacy, stranger, "white", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, allowed := c.game.ColorFor(c.user)
+			if allowed != c.allowed || got != c.want {
+				t.Fatalf("ColorFor(%q) = (%q, %v), want (%q, %v)",
+					c.user, got, allowed, c.want, c.allowed)
+			}
+		})
+	}
+}
