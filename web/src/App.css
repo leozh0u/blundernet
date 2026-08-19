@@ -28,6 +28,27 @@
 
   --danger: #e0796f;
 
+  /* Ink for anything sitting on the accent or on a light surface. It was
+     repeated as a literal in eight rules, which is how the two dead colours
+     below it survived a palette change unnoticed. */
+  --ink-on-light: #0d1926;
+
+  /* The two seat buttons paint themselves as the side they play, so they need
+     a light face and a dark one that are not the board squares themselves. */
+  --seat-light: #e6ecf3;
+  --seat-light-hover: #f4f8fc;
+  --seat-light-shadow: #9fb2c4;
+  --seat-light-ink: #16202b;
+  --seat-dark: #121822;
+  --seat-dark-hover: #1b2430;
+
+  /* Right and wrong on the board. These are the one place a colour other than
+     the accent is allowed to carry meaning, because green and red for correct
+     and incorrect is older than the site and reading it is instant. Kept
+     darker than --danger so the white glyph on top stays legible. */
+  --verdict-good: #5aa552;
+  --verdict-bad: #c0463c;
+
   /* Board squares. The pairing chess players read fastest is a light square
      that is nearly white and a dark square with enough contrast to tell the
      pieces apart at a glance. */
@@ -181,7 +202,7 @@ button {
   background: var(--blue);
   font-size: 1.2rem;
   line-height: 1;
-  color: #0d1926;
+  color: var(--ink-on-light);
 }
 
 .crest .knight {
@@ -287,22 +308,22 @@ button {
    look like a disabled label rather than a choice you could take.
    Painting each as its side says which is which without a legend. */
 .choice.light {
-  background: var(--sq-light);
-  color: #16202b;
+  background: var(--seat-light);
+  color: var(--seat-light-ink);
   font-weight: 600;
-  box-shadow: 0 4px 0 #9fb2c4;
+  box-shadow: 0 4px 0 var(--seat-light-shadow);
 }
 
 .choice.light:hover {
-  background: #f4f8fc;
+  background: var(--seat-light-hover);
 }
 
 .choice.light:active {
-  box-shadow: 0 1px 0 #9fb2c4;
+  box-shadow: 0 1px 0 var(--seat-light-shadow);
 }
 
 .choice.dark {
-  background: #121822;
+  background: var(--seat-dark);
   color: var(--ink);
   font-weight: 600;
   /* The dark button sits on a dark page, so it needs an edge to be a button
@@ -312,7 +333,7 @@ button {
 }
 
 .choice.dark:hover {
-  background: #1b2430;
+  background: var(--seat-dark-hover);
   border-color: var(--ink-faint);
 }
 
@@ -530,7 +551,7 @@ button {
 .again button {
   background: var(--blue);
   border-color: var(--blue);
-  color: #0d1926;
+  color: var(--ink-on-light);
   font-weight: 600;
 }
 
@@ -630,7 +651,7 @@ button {
   font-size: 0.97rem;
   font-weight: 600;
   padding: 0.5rem 1.1rem;
-  color: #0d1926;
+  color: var(--ink-on-light);
   background: var(--blue);
   border: 1px solid var(--blue);
   border-radius: var(--radius);
@@ -859,7 +880,7 @@ button {
 .chip.on {
   background: var(--blue);
   border-color: var(--blue);
-  color: #0d1926;
+  color: var(--ink-on-light);
   font-weight: 600;
 }
 
@@ -1054,7 +1075,7 @@ button {
   border: 1px solid var(--blue);
   border-radius: var(--radius);
   background: var(--blue);
-  color: #0d1926;
+  color: var(--ink-on-light);
   font-size: 0.97rem;
   font-weight: 600;
   cursor: pointer;
@@ -1097,7 +1118,7 @@ button {
 .after button.wide:not(.ghost) {
   border-color: var(--blue);
   background: var(--blue);
-  color: #0d1926;
+  color: var(--ink-on-light);
   font-weight: 600;
 }
 
@@ -1306,11 +1327,11 @@ button {
 }
 
 .board-overlay .badge.good circle {
-  fill: #5aa552;
+  fill: var(--verdict-good);
 }
 
 .board-overlay .badge.bad circle {
-  fill: #c0463c;
+  fill: var(--verdict-bad);
 }
 
 @keyframes hintpulse {
@@ -1387,7 +1408,7 @@ button {
   border: 1px solid var(--blue);
   border-radius: var(--radius);
   background: var(--blue);
-  color: #0d1926;
+  color: var(--ink-on-light);
   font-size: 0.97rem;
   font-weight: 600;
   cursor: pointer;
@@ -1409,10 +1430,10 @@ button {
 }
 
 .logo-piece {
-  fill: #0d1926;
+  fill: var(--ink-on-light);
 }
 
 .logo-floor {
-  fill: #0d1926;
+  fill: var(--ink-on-light);
   opacity: 0.35;
 }
