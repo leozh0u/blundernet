@@ -8,6 +8,15 @@ BASE="${BASE:-http://localhost:8080}"
 
 json() { python3 -c "import sys, json; print(json.load(sys.stdin)$1)"; }
 
+# A cookie jar, because a game belongs to whoever created it and the session
+# cookie is how the server knows that. Without one, every request here is a
+# different anonymous visitor and the second one cannot touch the game the
+# first one made. A browser has always carried these; this script did not, and
+# it only passed while the server let anybody move in any bot game.
+jar=$(mktemp)
+trap 'rm -f "$jar"' EXIT
+play() { curl -sf -b "$jar" -c "$jar" "$@"; }
+
 wait_for_ply() {
   local id=$1 want=$2
   for _ in $(seq 1 40); do
@@ -23,27 +32,28 @@ echo "1. health check"
 curl -sf "$BASE/healthz" > /dev/null
 
 echo "2. play black: engine must open"
-id=$(curl -sf -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
+id=$(play -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
   -d '{"color":"black"}' | json "['id']")
 wait_for_ply "$id" 1
 echo "   engine opened in game $id"
 
 echo "3. play white: 1. e4, engine must reply"
-id=$(curl -sf -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
+id=$(play -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
   -d '{"color":"white"}' | json "['id']")
-curl -sf -X POST "$BASE/api/games/$id/moves" -H 'Content-Type: application/json' \
+play -X POST "$BASE/api/games/$id/moves" -H 'Content-Type: application/json' \
   -d '{"uci":"e2e4"}' > /dev/null
 wait_for_ply "$id" 2
 reply=$(curl -sf "$BASE/api/games/$id" | json "['moves'][1]")
 echo "   engine replied $reply"
 
 echo "4. illegal and out-of-turn moves are rejected"
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/games/$id/moves" \
+code=$(curl -s -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' \
+  -X POST "$BASE/api/games/$id/moves" \
   -H 'Content-Type: application/json' -d '{"uci":"e2e4"}')
 [ "$code" = "400" ] || { echo "   expected 400, got $code" >&2; exit 1; }
 
 echo "5. resignation archives the game"
-curl -sf -X POST "$BASE/api/games/$id/resign" > /dev/null
+play -X POST "$BASE/api/games/$id/resign" > /dev/null
 sleep 1
 total=$(curl -sf "$BASE/api/stats" | json "['total']")
 [ "$total" -ge 1 ] || { echo "   stats empty after resign" >&2; exit 1; }
@@ -113,9 +123,15 @@ again=$(curl -sf -b "$jar2" "$BASE/api/me/profile" | json "['rating']")
 [ "$again" = "$after" ] || { echo "   rating changed on replay: $after -> $again" >&2; exit 1; }
 echo "   replayed archive did not double-count"
 
-anon=$(curl -sf -X POST "$BASE/api/games" -H 'Content-Type: application/json' \
-  -d '{"color":"white"}' | json "['id']")
-curl -sf -X POST "$BASE/api/games/$anon/resign" > /dev/null
+# A separate visitor with their own session, which is what "anonymous" means
+# here: not signed in, but still identifiable enough to own the game they just
+# made. The point of the check is that this game does not land in the
+# signed-in account above.
+ajar=$(mktemp)
+anon=$(curl -sf -c "$ajar" -b "$ajar" -X POST "$BASE/api/games" \
+  -H 'Content-Type: application/json' -d '{"color":"white"}' | json "['id']")
+curl -sf -c "$ajar" -b "$ajar" -X POST "$BASE/api/games/$anon/resign" > /dev/null
+rm -f "$ajar"
 still=$(curl -sf -b "$jar2" "$BASE/api/me/games" | json "['games'].__len__()")
 [ "$still" = "1" ] || { echo "   an anonymous game leaked into the account" >&2; exit 1; }
 echo "   anonymous games stay unattached"
