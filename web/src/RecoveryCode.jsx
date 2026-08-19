@@ -58,7 +58,14 @@ export default function RecoveryCode({ code, heading, blurb, onDone, doneLabel =
       {/* Monospace because this is a value to be transcribed character by
           character, which is what the font is actually for. Selectable and
           click-to-select, because copy buttons fail and people still need the
-          text. */}
+          text.
+
+          Rendered as its five groups rather than one string. At a narrow
+          width the line has to break somewhere, and a break inside a group is
+          how somebody copies the code down wrong. Breaking between groups is
+          both safe and legible, so the markup makes the safe break the only
+          one available. The screen reader gets the characters spaced out,
+          because "RJF1V" read as a word is useless to transcribe. */}
       <code
         className="recovery-code"
         ref={codeRef}
@@ -67,7 +74,12 @@ export default function RecoveryCode({ code, heading, blurb, onDone, doneLabel =
         onFocus={selectCode}
         aria-label={`Your recovery code is ${code.split('').join(' ')}`}
       >
-        {code}
+        {code.split('-').map((group, i, all) => (
+          <span className="recovery-group" key={i}>
+            {group}
+            {i < all.length - 1 && <span className="recovery-sep">-</span>}
+          </span>
+        ))}
       </code>
 
       <div className="recovery-actions">

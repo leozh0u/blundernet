@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { auth } from './auth.js'
+import { auth, tidyRecoveryCode } from './auth.js'
+import RecoveryCode from './RecoveryCode.jsx'
 
 // The account strip. Everything on the site works signed out, so this never
 // blocks anything: it names you, links to the page where the numbers are, and
@@ -103,17 +104,49 @@ export default function Account({ refreshKey }) {
 function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  // The code handed back by signup or by a successful recovery. While this is
+  // set the dialog shows nothing else: it is the only moment the plaintext
+  // exists, and closing over it loses the account.
+  const [issued, setIssued] = useState(null)
   const signingUp = mode === 'signup'
+  const recovering = mode === 'recover'
 
   async function submit(e) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      await (signingUp ? auth.signup(username, password) : auth.login(username, password))
-      onDone()
+      if (recovering) {
+        const out = await auth.recover(username, code, password)
+        setIssued({
+          code: out.recovery_code,
+          heading: 'You are back in, and here is a new code',
+          blurb:
+            'Using a recovery code retires it, so this one replaces it. Everything else signed in as you has been signed out.',
+          doneLabel: 'Done',
+        })
+      } else if (signingUp) {
+        const out = await auth.signup(username, password)
+        if (!out.recovery_code) {
+          // The account exists; only the code failed. Better to continue than
+          // to strand somebody on a dialog about a code that is not coming.
+          onDone()
+          return
+        }
+        setIssued({
+          code: out.recovery_code,
+          heading: 'Save your recovery code',
+          blurb:
+            'This is the only way back into your account if you forget your password. There is no email on this site, so nobody can send you a reset link. You will not see this code again.',
+          doneLabel: 'Start playing',
+        })
+      } else {
+        await auth.login(username, password)
+        onDone()
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -121,14 +154,37 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
     }
   }
 
+  if (issued) {
+    return (
+      <div className="modal-back">
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <RecoveryCode
+            code={issued.code}
+            heading={issued.heading}
+            blurb={issued.blurb}
+            doneLabel={issued.doneLabel}
+            onDone={onDone}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  const title = recovering ? 'Use a recovery code' : signingUp ? 'Create an account' : 'Sign in'
+
   return (
     <div className="modal-back" onClick={onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>{signingUp ? 'Create an account' : 'Sign in'}</h2>
+        <h2>{title}</h2>
 
         {signingUp && hasProgress && (
           <p className="note">
             Your rating and games so far come with you. Nothing is lost.
+          </p>
+        )}
+        {recovering && (
+          <p className="note">
+            Enter the code you were given when you signed up, and pick a new password.
           </p>
         )}
 
@@ -142,13 +198,34 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
             required
           />
         </label>
+
+        {recovering && (
+          <label>
+            Recovery code
+            {/* Tidied as it is typed, so a code pasted in lower case or
+                without its dashes visibly becomes the thing it is being
+                compared against. The server normalises too; this is so the
+                user can see their own input is being accepted. */}
+            <input
+              value={code}
+              onChange={(e) => setCode(tidyRecoveryCode(e.target.value))}
+              placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck="false"
+              className="code-input"
+              required
+            />
+          </label>
+        )}
+
         <label>
-          Password
+          {recovering ? 'New password' : 'Password'}
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete={signingUp ? 'new-password' : 'current-password'}
+            autoComplete={signingUp || recovering ? 'new-password' : 'current-password'}
             required
           />
         </label>
@@ -160,15 +237,37 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
             Cancel
           </button>
           <button type="submit" disabled={busy}>
-            {busy ? 'Working...' : signingUp ? 'Create account' : 'Sign in'}
+            {busy ? 'Working...' : recovering ? 'Set a new password' : signingUp ? 'Create account' : 'Sign in'}
           </button>
         </div>
 
         <p className="swap">
-          {signingUp ? 'Already have an account? ' : 'No account yet? '}
-          <button type="button" className="link" onClick={() => onSwitch(signingUp ? 'login' : 'signup')}>
-            {signingUp ? 'Sign in' : 'Create one'}
-          </button>
+          {recovering ? (
+            <>
+              Remembered it?{' '}
+              <button type="button" className="link" onClick={() => onSwitch('login')}>
+                Sign in
+              </button>
+            </>
+          ) : signingUp ? (
+            <>
+              Already have an account?{' '}
+              <button type="button" className="link" onClick={() => onSwitch('login')}>
+                Sign in
+              </button>
+            </>
+          ) : (
+            <>
+              No account yet?{' '}
+              <button type="button" className="link" onClick={() => onSwitch('signup')}>
+                Create one
+              </button>
+              {' or '}
+              <button type="button" className="link" onClick={() => onSwitch('recover')}>
+                use a recovery code
+              </button>
+            </>
+          )}
         </p>
       </form>
     </div>

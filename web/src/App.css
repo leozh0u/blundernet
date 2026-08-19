@@ -156,7 +156,6 @@ button {
   color: var(--ink);
 }
 
-/* A rating nobody should read much into yet. */
 /* A rating nobody should read much into yet. Used by the account strip, the
    profile page and the play card, so it is not scoped to any of them. */
 .prov {
@@ -1589,4 +1588,90 @@ button {
   .answer-hint {
     display: none;
   }
+}
+
+/* ---------- recovery code ---------- */
+
+/* The one screen where closing the tab loses something unrecoverable, so it
+   is built to be read rather than dismissed: the stakes before the code, the
+   code big enough to transcribe, and no way past it until the box is ticked. */
+.recovery h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.recovery-code {
+  display: block;
+  margin: 1rem 0;
+  padding: 0.9rem 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: clamp(0.9rem, 3.4vw, 1.15rem);
+  letter-spacing: 0.04em;
+  text-align: center;
+  cursor: text;
+  user-select: all;
+}
+
+/* Each group is unbreakable, so a wrap can only land between groups. */
+.recovery-group {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* The separator belongs to the group before it, so a wrapped line never
+   starts with a stray hyphen. */
+.recovery-sep {
+  color: var(--ink-faint);
+}
+
+.recovery-code:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.recovery-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.recovery-hint {
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+}
+
+.recovery-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 1rem 0 0.25rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.recovery-ack input {
+  width: auto;
+  margin-top: 0.25rem;
+  accent-color: var(--blue);
+}
+
+/* A disabled continue is the point of this screen, so it has to look
+   deliberately unavailable rather than broken. */
+.recovery .modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Recovery codes are transcribed, so they get the font meant for that. */
+.code-input {
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
