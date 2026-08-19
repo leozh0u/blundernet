@@ -481,6 +481,10 @@ export default function App() {
               </>
             )}
           </div>
+          {/* Both of these start a game, so they are labelled as the choice
+              they are. Without the heading the pair reads as a setting that
+              has already been made rather than a question being asked. */}
+          <span className="choices-label">Play as</span>
           <div className="choices">
             <button className="choice light" onClick={() => newGame('white')}>
               <span className="seal light">♔</span>

@@ -234,11 +234,26 @@ button {
   padding-bottom: 2rem;
 }
 
+/* The two seat buttons are peers: the same action with a different argument.
+   They are also the only thing on this screen that starts a game, so they get
+   a heading and real space under them. Without the gap they sit flush against
+   the You card and read as tabs belonging to it, which is the wrong promise:
+   they do not filter that card, they leave the page. */
 .choices {
   display: flex;
   gap: 0.75rem;
-  margin-top: 1.25rem;
+  margin-top: 0.5rem;
+  margin-bottom: 2rem;
   flex-wrap: wrap;
+}
+
+.choices-label {
+  display: block;
+  margin-top: 1.25rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
 }
 
 /* Buttons sit on a shadow that shortens when pressed, so a click feels like
@@ -258,30 +273,57 @@ button {
   transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.15s ease;
 }
 
-.choice:hover {
-  background: #3a3733;
-}
-
 .choice:active {
   transform: translateY(3px);
   box-shadow: 0 1px 0 var(--line-strong);
 }
 
-/* Playing white is the common case, so it gets the accent and the other does
-   not. Two primary buttons is no primary button. */
+/* Each button is painted as the side it plays, using the board's own two
+   square colours. This replaces an earlier version that gave White the blue
+   accent and left Black on the plain surface, on the reasoning that white is
+   the common case and two primary buttons is no primary button. That is a
+   sound rule for a primary and a secondary action, and these are neither:
+   they are the same action with a different argument. Ranking them made Black
+   look like a disabled label rather than a choice you could take.
+   Painting each as its side says which is which without a legend. */
 .choice.light {
-  background: var(--blue);
-  color: #0d1926;
+  background: var(--sq-light);
+  color: #16202b;
   font-weight: 600;
-  box-shadow: 0 4px 0 var(--blue-shadow);
+  box-shadow: 0 4px 0 #9fb2c4;
 }
 
 .choice.light:hover {
-  background: #8cc253;
+  background: #f4f8fc;
 }
 
 .choice.light:active {
-  box-shadow: 0 1px 0 var(--blue-shadow);
+  box-shadow: 0 1px 0 #9fb2c4;
+}
+
+.choice.dark {
+  background: #121822;
+  color: var(--ink);
+  font-weight: 600;
+  /* The dark button sits on a dark page, so it needs an edge to be a button
+     at all. The light one is its own edge. */
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 4px 0 var(--line-strong);
+}
+
+.choice.dark:hover {
+  background: #1b2430;
+  border-color: var(--ink-faint);
+}
+
+.choice.dark:active {
+  box-shadow: 0 1px 0 var(--line-strong);
+}
+
+/* Keyboard users get the same affordance the mouse gets. */
+.choice:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 
 .choice .seal {
