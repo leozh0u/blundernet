@@ -47,16 +47,37 @@ type cell struct {
 	n     int64
 }
 
-// candidatesPerScan is how many rows a single cell scan asks for. A little
-// over the batch the drill asks for, because rows are dropped afterwards for
-// being already seen and a second round trip costs more than a few spare rows.
+// scanSpare is how many rows beyond the caller's need a scan asks for, to
+// cover rows dropped afterwards for being already seen or already picked. A
+// second round trip costs more than a couple of spare rows.
 //
-// It was 32, and on this box that was the difference between working and not.
-// A themed scan walks the shuffle rechecking the theme against the heap, and
-// the common themes sit about one row in ten to one in thirty-six, so the rows
-// walked scale with this number and every one of them is a random page. A
-// skewer scan measured 885 pages at 32 and 272 at 12.
-const candidatesPerScan = 12
+// The size of a scan is deliberately derived from what is still wanted rather
+// than being a constant. A fixed number smaller than the batch quietly breaks
+// the weighting: one scan cannot fill the request, so Select draws another
+// cell, and drawCell takes cells out of the pool as it goes. The second draw
+// therefore comes from what is left rather than from the true distribution,
+// which over-represents small cells. That is not a rounding error. With a
+// corpus of 1000 three-ply and 100 five-ply puzzles, asking for 25 with a
+// fixed limit of 12 returned 79% three-ply where the population is 91%.
+//
+// Keeping the scan at least as large as the outstanding request means the
+// common case is one cell, drawn in proportion, which is the whole design.
+//
+// Why this is not simply large: a themed scan walks the shuffle rechecking the
+// theme against the heap, and the common themes sit about one row in ten to
+// one in thirty-six, so the rows walked scale with the limit and every one is
+// a random page. A skewer scan measured 885 pages at a limit of 32 and 272 at
+// 12. Asking for what is needed and no more is what keeps both properties.
+const scanSpare = 2
+
+// scanLimit is how many rows to ask a cell for when want rows are still
+// outstanding.
+func scanLimit(want int) int {
+	if want < 1 {
+		want = 1
+	}
+	return want + scanSpare
+}
 
 // maxScans bounds the work one Select can do. A filter that matches almost
 // nothing must fail fast rather than walk every cell it was given.
@@ -103,22 +124,23 @@ func (p *Puzzles) Select(ctx context.Context, f Filter, n int, seen func(id stri
 			rows []puzzle.Puzzle
 			err  error
 		)
-		if c.n <= candidatesPerScan {
-			rows, err = p.scanWholeCell(ctx, c, f, candidatesPerScan)
+		limit := scanLimit(n - len(out))
+		if c.n <= int64(limit) {
+			rows, err = p.scanWholeCell(ctx, c, f, limit)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			cursor := int32(rand.Uint32())
-			rows, err = p.scanCell(ctx, c, f, cursor, candidatesPerScan)
+			rows, err = p.scanCell(ctx, c, f, cursor, limit)
 			if err != nil {
 				return nil, err
 			}
 			// A cursor landing near the end of the shuffle finds few rows
 			// above it, so the scan wraps to the start rather than returning
 			// short and making the tail of every cell unreachable.
-			if len(rows) < candidatesPerScan {
-				more, err := p.scanCellWrapped(ctx, c, f, cursor, candidatesPerScan-len(rows))
+			if len(rows) < limit {
+				more, err := p.scanCellWrapped(ctx, c, f, cursor, limit-len(rows))
 				if err != nil {
 					return nil, err
 				}
