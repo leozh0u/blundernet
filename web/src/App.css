@@ -157,7 +157,9 @@ button {
 }
 
 /* A rating nobody should read much into yet. */
-.account .prov {
+/* A rating nobody should read much into yet. Used by the account strip, the
+   profile page and the play card, so it is not scoped to any of them. */
+.prov {
   font-style: normal;
   font-size: 0.7em;
   vertical-align: super;
@@ -1176,7 +1178,15 @@ button {
   margin-top: 0.9rem;
 }
 
+/* The shared filter label is a fixed 4.5rem so the puzzle filter rows line up
+   in a column. This row has only one label, so that width was just a gap
+   between "Level" and the number it belongs to. */
+.levels .filter-label {
+  width: auto;
+}
+
 .levels-value {
+  margin-left: -0.35rem;
   font-size: 1.05rem;
   font-weight: 600;
 }

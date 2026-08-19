@@ -31,6 +31,21 @@ const (
 	assumedDeviation  = 150
 )
 
+// StartRating is where a new player begins, and it is deliberately not the
+// Glicko-2 default of 1500. That number is the convention for a pool whose
+// average is 1500. This pool is the ladder above, which runs 520 to 1120, so
+// seeding at 1500 put every new account 380 points above the strongest
+// opponent on the site and left a new rating able to travel in one direction
+// only. The first test of it went 1500 to 916 on a single loss to level 3.
+//
+// 1000 is measuredRating: the one rung estimated from real games rather than
+// assumed, which makes it the least invented number on the scale.
+//
+// rating.DefaultRating stays 1500. That is the centre of the Glicko-2 display
+// scale and appears in the mu transform, so it is part of the algorithm rather
+// than a product choice.
+const StartRating = measuredRating
+
 // EngineRating is the rating assigned to a bot level.
 func EngineRating(level int) float64 {
 	return measuredRating + float64(level-measuredLevel)*pointsPerLevel

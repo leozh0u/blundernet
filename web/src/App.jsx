@@ -517,7 +517,19 @@ export default function App() {
               <dl className="meta">
                 <div>
                   <dt>Rating</dt>
-                  <dd>{mine ? Math.round(mine.rating) : '...'}</dd>
+                  {/* The question mark is the whole point of showing a
+                      provisional rating rather than hiding it: the number is
+                      real, it is just not evidence yet. Printing a bare 1000
+                      to somebody who has played nothing reads as a measurement
+                      of them, which it is not. */}
+                  <dd>
+                    {mine ? Math.round(mine.rating) : '...'}
+                    {mine?.provisional && (
+                      <i className="prov" title="Provisional until five rated games">
+                        ?
+                      </i>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Bot level</dt>

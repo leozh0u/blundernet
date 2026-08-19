@@ -300,7 +300,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	// first visit and a crawler costs nothing.
 	if user == nil {
 		writeJSON(w, http.StatusOK, &store.Profile{
-			IsGuest: true, Rating: rating.DefaultRating,
+			IsGuest: true, Rating: store.StartRating,
 			Deviation: rating.DefaultDeviation, Provisional: true,
 			BotLevel: engine.DefaultLevel,
 		})
