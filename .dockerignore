@@ -2,6 +2,19 @@
 .github
 web/node_modules
 web/dist
-deploy/terraform
 loadtest
 *.md
+
+# Terraform, all of it. The provider plugins under .terraform are 766MB per
+# stack, and they were reaching the build context because only one of the two
+# deploy directories was named here. A build that ships 813MB of AWS provider
+# binaries to the daemon times out before it compiles anything, which is what
+# was happening.
+#
+# Matched by pattern rather than by path so a third stack cannot reintroduce
+# it. State files are excluded too: they hold infrastructure detail and have
+# no business in an image.
+deploy/
+**/.terraform/
+*.tfstate
+*.tfstate.*
