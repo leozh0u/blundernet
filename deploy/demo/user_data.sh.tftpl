@@ -65,21 +65,26 @@ cat >/opt/blundernet/compose.yaml <<'COMPOSE'
 services:
   postgres:
     image: postgres:17-alpine
-    # Tuned for the box rather than for a default machine. effective_cache_size
-    # of 4GB told the planner the whole corpus was cached when only about
-    # 400MB ever is, and random_page_cost of 4 is priced for a spinning disk
-    # rather than gp3. Found by load testing the puzzle search, which is I/O
-    # bound here: 2,599 reads a second at 92% disk utilization.
+    # Tuned for the box rather than for a default machine, and these numbers
+    # are for the t4g.small in var.instance_type. Moving the instance type
+    # without moving these leaves the planner working from the wrong picture,
+    # so they belong in the same change.
+    #
+    # random_page_cost of 4 is priced for a spinning disk rather than gp3, and
+    # the default 128MB of shared_buffers on a 2GB box leaves the corpus to the
+    # OS cache alone. Found by load testing the puzzle search, which was I/O
+    # bound on the old t4g.micro: 2,599 reads a second at 92% disk utilization
+    # against a 1,095MB heap and 910MB of RAM. Two gigabytes fits it.
     command:
       - postgres
       - -c
-      - shared_buffers=192MB
+      - shared_buffers=512MB
       - -c
-      - effective_cache_size=512MB
+      - effective_cache_size=1280MB
       - -c
       - random_page_cost=1.1
       - -c
-      - maintenance_work_mem=64MB
+      - maintenance_work_mem=128MB
     restart: unless-stopped
     environment:
       POSTGRES_USER: blundernet

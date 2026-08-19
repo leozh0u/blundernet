@@ -53,13 +53,27 @@ A search then draws a cell in proportion to how many puzzles it holds, and range
 
 Two bugs in that came out of running it rather than reading it. A nil Go slice reaches Postgres as NULL, and every comparison against NULL is NULL rather than false, so an unset filter silently matched nothing instead of everything. And rare themes returned empty because the sampler was drawing cells that held none of them, which is why the cell counts are keyed by theme and the weights come from the rarest theme asked for.
 
-**The puzzle search is I/O bound, and I have the number.** Load tested against production with k6. The corpus heap is 1,095MB with 270MB of indexes, on a box with 910MB of RAM, and the sampler reads random rows by design, so the working set does not fit and most reads are cold: 2,599 reads a second at 92% disk utilization, Postgres sitting in `DataFileRead`, CPU almost idle.
+**The puzzle search was I/O bound, and the fix was half code and half money.** Load tested against production with k6. The corpus heap is 1,095MB with 270MB of indexes, and the box had 910MB of RAM. The sampler reads random rows by design, so the working set did not fit and most reads were cold: 2,599 reads a second at 92% disk utilization, Postgres sitting in `DataFileRead`, CPU almost idle.
+
+The first thing the load test measured, though, was the load test. It sent a theme on seven requests in eight, and the filter panel on the site opens empty, so the ordinary request carries no filter at all. Same code, two searches a second: 1.32 s median on that mix, 92 ms on a realistic one. The ceiling was a property of the test.
 
 The expensive request is a themed one. A theme is a recheck against the heap rather than an index condition, and the common themes are not that common inside a cell: `skewer` is one row in 36, `backRankMate` one in 34, `mateIn2` one in 3.5. Because the scan walks the shuffle, those 36 rows are 36 random pages. Past a point the planner abandons the ordered scan for a `BitmapAnd` of the sample and theme indexes and then sorts everything to apply the limit, which measured 5,154 pages and 2.3 seconds for 32 rows. Forcing the ordered scan back on is worse, at 9,399 pages.
 
 So the scan asks for fewer rows: `candidatesPerScan` went from 32 to 12, which cuts the walk directly and keeps the planner off the bitmap. Measured over twelve real cells for each of seven themes, total pages touched went from 55,821 to 20,602.
 
-That is the cheap lever, and it does not fix the cause. The fix that would is an index the theme can be tested against without touching the heap, and it does not fit: 73 themes over 14.8M theme-rows is the size of the corpus again. What is left is memory, which is a monthly bill rather than an engineering decision.
+That is the cheap lever, and it does not fix the cause. The fix that would is an index the theme can be tested against without touching the heap, and it does not fit: 73 themes over 14.8M theme-rows is the size of the corpus again. What was left was memory, which is a monthly bill rather than an engineering decision, so the box went from a t4g.micro to a t4g.small: 2GB instead of 1GB, $12.26 a month instead of $6.13. `shared_buffers` and `effective_cache_size` moved with it, since an instance size and a planner told the wrong size about it are the same change.
+
+Both levers, at two searches a second, and a third column for the mix the site is actually asked for:
+
+| | stress median | stress p95 | real median | real p95 |
+|---|---|---|---|---|
+| t4g.micro, 32 candidates | 1.32 s | 9.49 s | 92 ms | 1.0 s |
+| t4g.micro, 12 candidates | 158 ms | 2.99 s | 92 ms | 342 ms |
+| t4g.small, 12 candidates | 50 ms | 1.01 s | 23 ms | 369 ms |
+
+Disk went from a flat 92% utilization to bursts between 11% and 86%, and `buff/cache` now sits at 1,426MB against a 1,365MB working set, which is the whole point: it fits. The realistic mix holds a 22 ms median at five searches a second, and one search is a batch of ten puzzles.
+
+Two honest caveats. The first row was measured on a colder cache than the last, so some of that improvement is free. And the numbers immediately after the resize were worse in the tail than before it, because a rebooted box has an empty `shared_buffers`; these are from the second pass, once it warmed.
 
 **The api servers hold no state.** Live games exist in Redis with a 24-hour TTL, finished games in Postgres, and the servers themselves only hold WebSocket connections. Any instance can serve any request, which is what lets the fleet scale horizontally and lets a task die mid-game without the player noticing. Cross-instance WebSocket delivery works because every instance subscribes to game events over Redis pub/sub rather than keeping per-game connection registries.
 
@@ -203,7 +217,7 @@ The repo ships two stacks, because the architecture worth designing and the arch
 
 `deploy/terraform` is the reference design: an autoscaling api fleet behind an ALB, workers scaled on queue depth, ElastiCache, RDS. It is what the system should look like under load, it has been deployed and exercised end to end, and it costs roughly $60 a month to leave running. So it goes up on demand and comes down after.
 
-`deploy/demo` is the version cheap enough to leave running: one t4g.micro with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $11 a month. Same code, same queue semantics, a tenth of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. `deploy/demo` is what serves blundernet.com today.
+`deploy/demo` is the version cheap enough to leave running: one t4g.small with the same two container images against a real SQS queue, Postgres and Redis alongside, Caddy in front, about $17 a month. Same code, same queue semantics, under a third of the bill. A demo link does not need six tasks and a load balancer, and pretending otherwise would be an expensive way to make a point. `deploy/demo` is what serves blundernet.com today.
 
 ```
 make demo-deploy    # build arm64 images, push, stand up the box

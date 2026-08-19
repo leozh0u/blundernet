@@ -33,7 +33,7 @@ variable "name" {
 
 variable "instance_type" {
   type    = string
-  default = "t4g.micro"
+  default = "t4g.small"
 }
 
 # Engine strength. The box is burstable, so the demo runs fewer
