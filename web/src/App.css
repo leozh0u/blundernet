@@ -1165,24 +1165,40 @@ button {
 /* Level picker on the play page. Same chips as the puzzle filters, because
    they do the same job and learning two controls for one idea is one too
    many. */
+/* Label, then the value or the control, then one sentence saying who decides
+   it. The sentence wraps to its own line rather than trailing off the end of
+   the row, which is what made the old version read as a fragment. */
 .levels {
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
   margin-top: 0.9rem;
+}
+
+.levels-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.levels-note {
+  flex-basis: 100%;
+  max-width: 34rem;
+  font-size: 0.95rem;
+  color: var(--ink-faint);
+}
+
+/* On a wide row the sentence can sit beside the control instead of under it,
+   but only once there is room for both without crowding. */
+@media (min-width: 900px) {
+  .levels-note {
+    flex-basis: auto;
+  }
 }
 
 .ladder {
   font-size: 1.05rem;
   font-weight: 600;
-}
-
-.ladder i {
-  margin-left: 0.4rem;
-  font-style: normal;
-  font-size: 0.95rem;
-  font-weight: 400;
-  color: var(--ink-faint);
 }
 
 /* Saving a puzzle. The star sits in the panel header rather than with the
@@ -1452,4 +1468,115 @@ button {
 .logo-floor {
   fill: var(--ink-on-light);
   opacity: 0.35;
+}
+
+/* The written answer under a missed ranked puzzle. The board plays the line
+   out too, but that animation is over in a few seconds and never says what it
+   was; this stays, and it is in the notation a player reads. */
+.answer {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.answer h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 0.35rem;
+}
+
+.answer-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.25rem;
+  font-family: var(--mono);
+  font-size: 1rem;
+}
+
+/* Every move is a button that jumps the board to it, so the line is both the
+   score and the scrubber. Styled as text until you touch it: a row of framed
+   buttons would read as a toolbar rather than as a game score. */
+.answer-move {
+  padding: 0.1rem 0.3rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.answer-move:hover {
+  background: var(--surface);
+}
+
+.answer-move.on {
+  background: var(--blue-wash);
+}
+
+.answer-move.on .answer-san {
+  color: var(--blue);
+}
+
+.answer-move:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+/* Move numbers step back so the moves themselves carry the line, which is how
+   a printed game score reads. */
+.answer-no {
+  margin-right: 0.2rem;
+  color: var(--ink-faint);
+}
+
+.answer-san {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.answer-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+.answer-nav button {
+  min-width: 2.4rem;
+  padding: 0.3rem 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.answer-nav button:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+/* A disabled step control is the end of the line, which is information. It
+   stays legible rather than fading to unreadable. */
+.answer-nav button:disabled {
+  color: var(--ink-faint);
+  border-color: var(--line);
+  cursor: default;
+}
+
+.answer-hint {
+  margin-left: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 700px) {
+  /* Arrow keys are not a thing on a phone, so the hint would be a lie. */
+  .answer-hint {
+    display: none;
+  }
 }

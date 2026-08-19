@@ -21,6 +21,9 @@ export default function Ranked() {
   const [board, setBoard] = useState(null)
   const [phase, setPhase] = useState('loading') // loading, locked, setup, solving, done, empty
   const [result, setResult] = useState(null)
+  const [answer, setAnswer] = useState(null) // {moves:[...], fens:[...]} once an attempt is missed
+  const [cursor, setCursor] = useState(0)  // which ply of the answer the board is showing
+  const [autoplay, setAutoplay] = useState(true)
   const [selected, setSelected] = useState(null)
   const [verdict, setVerdict] = useState(null)
   const [me, setMe] = useState(null)
@@ -68,6 +71,8 @@ export default function Ranked() {
 
   const next = useCallback(async () => {
     setPhase('loading')
+    setAnswer(null)
+    setCursor(0)
     setError('')
     const res = await fetch('/api/puzzles/ranked')
     if (res.status === 401) {
@@ -99,32 +104,37 @@ export default function Ranked() {
     return () => window.removeEventListener('blundernet:authed', retry)
   }, [loadMe, next])
 
-  // Play out the rest of the line once the attempt is over, so a failed
-  // puzzle still shows what the answer was.
-  const revealFrom = useCallback(
-    (position, solution, from) => {
-      let running = position
-      let delay = 500
-      for (let i = from; i < solution.length; i++) {
-        const uci = solution[i]
-        const snapshot = new Chess(running.fen())
-        try {
-          snapshot.move({
-            from: uci.slice(0, 2),
-            to: uci.slice(2, 4),
-            promotion: uci[4] || undefined,
-          })
-        } catch {
-          return
-        }
-        running = snapshot
-        const shown = new Chess(snapshot.fen())
-        later(() => setBoard(shown), delay)
-        delay += 550
+  // buildLine walks the solution once and keeps every position along it, so
+  // the answer becomes something to step through rather than an animation that
+  // happens at you. fens[0] is the position before the first correct move, so
+  // cursor n means n plies of the answer have been played.
+  const buildLine = (position, solution, from) => {
+    const replay = new Chess(position.fen())
+    const moves = []
+    const fens = [replay.fen()]
+    for (let i = from; i < solution.length; i++) {
+      const uci = solution[i]
+      let mv
+      try {
+        mv = replay.move({
+          from: uci.slice(0, 2),
+          to: uci.slice(2, 4),
+          promotion: uci[4] || undefined,
+        })
+      } catch {
+        // A line that will not replay is a corpus problem, not a user problem.
+        // Better to show the moves so far than to blank the panel.
+        break
       }
-    },
-    [later],
-  )
+      const white = mv.color === 'w'
+      // moveNumber() after a black move has already rolled to the next one, so
+      // a line starting on black takes the number it was played on.
+      const number = white ? replay.moveNumber() : replay.moveNumber() - 1
+      moves.push({ san: mv.san, white, number, lead: moves.length === 0 && !white })
+      fens.push(replay.fen())
+    }
+    return { moves, fens }
+  }
 
   const send = async (uci, positionBefore, afterMine) => {
     const res = await fetch('/api/puzzles/ranked/move', {
@@ -157,11 +167,81 @@ export default function Ranked() {
     setResult(body)
     loadMe()
     if (!body.correct && body.solution) {
-      // Rewind to before the mistake and play the real line.
+      // Rewind to before the mistake and hand back the real line to walk.
+      const from = stepOf(positionBefore, puzzle)
+      const line = buildLine(positionBefore, body.solution, from)
       setBoard(positionBefore)
-      revealFrom(positionBefore, body.solution, stepOf(positionBefore, puzzle))
+      setAnswer(line)
+      setCursor(0)
+      setAutoplay(true)
     }
   }
+
+  // ---------- walking the answer ----------
+
+  // The board follows the cursor whenever there is a line to walk, so every
+  // way of moving through it (buttons, arrow keys, clicking a move) is the
+  // same one state change and they cannot disagree.
+  useEffect(() => {
+    if (!answer) return
+    const fen = answer.fens[cursor]
+    if (fen) setBoard(new Chess(fen))
+  }, [answer, cursor])
+
+  const atStart = cursor === 0
+  const atEnd = !answer || cursor >= answer.fens.length - 1
+
+  const step = useCallback(
+    (delta) => {
+      setAutoplay(false) // any deliberate move ends the replay
+      setCursor((c) => {
+        if (!answer) return c
+        return Math.min(Math.max(c + delta, 0), answer.fens.length - 1)
+      })
+    },
+    [answer],
+  )
+
+  const jumpTo = useCallback((i) => {
+    setAutoplay(false)
+    setCursor(i)
+  }, [])
+
+  // The line plays itself once, because the first thing somebody wants after
+  // missing is to see the answer without doing any work. It stops the moment
+  // they touch anything, which is what makes it a courtesy rather than
+  // something to sit through.
+  useEffect(() => {
+    if (!answer || !autoplay || atEnd) return
+    const t = setTimeout(() => setCursor((c) => c + 1), cursor === 0 ? 600 : 700)
+    return () => clearTimeout(t)
+  }, [answer, autoplay, atEnd, cursor])
+
+  // Left and right walk the line, the way they do on every board online.
+  // Ignored while typing, and only bound once there is something to walk.
+  useEffect(() => {
+    if (!answer) return
+    const onKey = (e) => {
+      const tag = (e.target.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        step(-1)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        step(1)
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        jumpTo(0)
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        jumpTo(answer.fens.length - 1)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [answer, step, jumpTo])
 
   // How many plies of the solution had been played when the attempt ended.
   // The board history holds the setup move plus everything since.
@@ -307,6 +387,48 @@ export default function Ranked() {
               </div>
             )}
           </dl>
+          {phase === 'done' && answer && answer.moves.length > 0 && (
+            <div className="answer">
+              <h4>The answer</h4>
+              {/* Each move is a button, so the written line doubles as the
+                  scrubber: reading it and navigating it are the same gesture
+                  rather than two controls that have to agree. */}
+              <p className="answer-line">
+                {answer.moves.map((m, i) => (
+                  <button
+                    type="button"
+                    key={i}
+                    className={`answer-move ${cursor === i + 1 ? 'on' : ''}`}
+                    onClick={() => jumpTo(i + 1)}
+                    aria-current={cursor === i + 1 ? 'step' : undefined}
+                  >
+                    {(m.white || m.lead) && (
+                      <span className="answer-no">
+                        {m.number}
+                        {m.white ? '.' : '...'}
+                      </span>
+                    )}
+                    <span className="answer-san">{m.san}</span>
+                  </button>
+                ))}
+              </p>
+              <div className="answer-nav">
+                <button type="button" onClick={() => jumpTo(0)} disabled={atStart} aria-label="Back to the start" title="Start">
+                  &#124;&lt;
+                </button>
+                <button type="button" onClick={() => step(-1)} disabled={atStart} aria-label="Previous move" title="Previous (left arrow)">
+                  &lt;
+                </button>
+                <button type="button" onClick={() => step(1)} disabled={atEnd} aria-label="Next move" title="Next (right arrow)">
+                  &gt;
+                </button>
+                <button type="button" onClick={() => jumpTo(answer.fens.length - 1)} disabled={atEnd} aria-label="To the end" title="End">
+                  &gt;&#124;
+                </button>
+                <span className="answer-hint">Arrow keys work too</span>
+              </div>
+            </div>
+          )}
           {phase === 'done' && result.explanation && (
             <div className="explain">
               <p className="headline">{result.explanation.headline}</p>
