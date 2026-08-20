@@ -58,8 +58,11 @@ export default function Account({ refreshKey }) {
           <a className="whoami" href="/me">
             Guest
           </a>
+          {/* Says what it does. "Keep my progress" describes the benefit but
+              leaves somebody guessing whether it signs them up, and the ranked
+              gate two clicks away already calls it creating an account. */}
           <button className="link" onClick={() => setForm('signup')}>
-            Keep my progress
+            Create an account
           </button>
           <button className="link quiet" onClick={() => setForm('login')}>
             Sign in

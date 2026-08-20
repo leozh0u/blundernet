@@ -1742,3 +1742,14 @@ button {
 .modal textarea::placeholder {
   color: var(--ink-faint);
 }
+
+/* Told to a guest wherever they are building up something they could lose.
+   Quiet rather than a banner: it is a fact worth knowing, not a warning, and
+   nagging somebody who is happily playing is how you get them to leave. */
+.guest-note {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+}

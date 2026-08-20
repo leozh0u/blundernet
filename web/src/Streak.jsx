@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { sound } from './sound.js'
+import { auth } from './auth.js'
+import GuestNote from './GuestNote.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
 
 // Streak. Puzzles get harder until you miss one, and then the run is over.
@@ -18,6 +20,7 @@ export default function Streak() {
   const [phase, setPhase] = useState('idle') // idle, setup, solving, over
   const [count, setCount] = useState(0)
   const [best, setBest] = useState(0)
+  const [guest, setGuest] = useState(false)
   const [selected, setSelected] = useState(null)
   const [verdict, setVerdict] = useState(null)
   const [error, setError] = useState('')
@@ -33,6 +36,13 @@ export default function Streak() {
     },
     [],
   )
+
+  // Who is playing, once, so the panel can say whether the best run survives
+  // closing the tab. A guest streak is real and rated and kept, just kept in a
+  // cookie.
+  useEffect(() => {
+    auth.me().then((u) => setGuest(!u || u.guest)).catch(() => {})
+  }, [])
 
   const present = useCallback(
     (p) => {
@@ -231,6 +241,7 @@ export default function Streak() {
               <dd>{best}</dd>
             </div>
           </dl>
+          {guest && <GuestNote text="Your best run is saved to this browser only." />}
         </div>
 
         {phase === 'over' && (

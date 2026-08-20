@@ -11,6 +11,7 @@ import BoardOverlay from './BoardOverlay.jsx'
 import Logo from './Logo.jsx'
 import { sound } from './sound.js'
 import Feedback from './Feedback.jsx'
+import GuestNote from './GuestNote.jsx'
 
 const api = {
   async createGame(color, mode, level) {
@@ -589,6 +590,7 @@ export default function App() {
                   <dd>{mine ? mine.rated_games : '...'}</dd>
                 </div>
               </dl>
+              {mine?.guest && <GuestNote text="Your rating and games are saved to this browser only." />}
             </div>
 
             <div className="card">
