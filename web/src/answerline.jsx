@@ -152,7 +152,15 @@ export function useAnswerLine(line, { startAtEnd = false } = {}) {
     return () => window.removeEventListener('keydown', onKey)
   }, [line, step, jumpTo])
 
-  return { cursor, atStart, atEnd, step, jumpTo, fen: line ? line.fens[cursor] : null }
+  // play walks the rest of the line on its own, for the caller that wants a
+  // "show me" button rather than making somebody press right five times.
+  const play = useCallback(() => {
+    if (!line) return
+    if (cursor >= line.fens.length - 1) setCursor(0)
+    setAutoplay(true)
+  }, [line, cursor])
+
+  return { cursor, atStart, atEnd, step, jumpTo, play, fen: line ? line.fens[cursor] : null }
 }
 
 // MoveNavigator is the written line plus its controls. Each move is a button
@@ -195,7 +203,6 @@ export function MoveNavigator({ line, nav, heading = 'The answer' }) {
         <button type="button" onClick={() => nav.jumpTo(line.fens.length - 1)} disabled={nav.atEnd} aria-label="To the end" title="End">
           &gt;&#124;
         </button>
-        <span className="answer-hint">Arrow keys work too</span>
       </div>
     </div>
   )

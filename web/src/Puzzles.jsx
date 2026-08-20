@@ -742,6 +742,13 @@ export default function Puzzles({ shared }) {
 
             {(phase === 'solved' || phase === 'failed') && (
               <div className="after">
+                {/* The line used to play itself the moment you got it wrong,
+                    which showed the answer but took the choice away and left
+                    nothing to press if you wanted to see it again. A button
+                    does the same thing on request, as many times as you like. */}
+                <button className="wide" onClick={nav.play}>
+                  {phase === 'failed' ? 'Play the answer' : 'Replay the line'}
+                </button>
                 <button className="wide" onClick={next}>
                   Next puzzle
                 </button>
