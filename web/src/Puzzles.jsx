@@ -3,6 +3,7 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import BoardOverlay from './BoardOverlay.jsx'
 import { sound } from './sound.js'
+import { buildLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -112,6 +113,10 @@ export default function Puzzles({ shared }) {
   const hintsUsed = useRef(0)
   const [saved, setSaved] = useState(false)
   const [verdict, setVerdict] = useState(null)
+  // The line to walk once the puzzle is over. Learning mode used to animate
+  // the answer once and stop, which shows the moves but not the positions
+  // between them, and the one worth looking at is usually two plies back.
+  const [answer, setAnswer] = useState(null)
   const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
@@ -125,6 +130,13 @@ export default function Puzzles({ shared }) {
   // Every delayed board update is cancellable, because moving on to the next
   // puzzle while the opponent's reply is still pending would otherwise play
   // that reply onto the new position.
+  const nav = useAnswerLine(answer)
+
+  // The board follows the cursor while an answer is on screen.
+  useEffect(() => {
+    if (nav.fen) setBoard(new Chess(nav.fen))
+  }, [nav.fen])
+
   const later = useCallback((fn, ms) => {
     const id = setTimeout(fn, ms)
     timers.current.push(id)
@@ -158,6 +170,8 @@ export default function Puzzles({ shared }) {
 
   // Show a puzzle: set the position before the blunder, then play the blunder
   // after a beat so you see what you are being asked to punish.
+  // A new puzzle clears any answer still on screen, or the board would keep
+  // following the old line's cursor instead of the new position.
   const present = useCallback(
     (p) => {
       clearLater()
@@ -166,6 +180,10 @@ export default function Puzzles({ shared }) {
       setSelected(null)
       setHintLevel(0)
       setVerdict(null)
+      // A new puzzle retires any answer still on screen. Without this the
+      // board keeps following the old line's cursor instead of the new
+      // position, and the arrow keys stay bound to a puzzle that is gone.
+      setAnswer(null)
       hintsUsed.current = 0
       setSaved(!!p.saved)
       setPhase('setup')
@@ -312,27 +330,6 @@ export default function Puzzles({ shared }) {
 
   // Reveal the rest of the solution on the board, which is what a failed
   // puzzle owes you.
-  const revealFrom = useCallback(
-    (position, solution, from) => {
-      let delay = 400
-      let running = position
-      for (let i = from; i < solution.length; i++) {
-        const uci = solution[i]
-        const snapshot = new Chess(running.fen())
-        snapshot.move({
-          from: uci.slice(0, 2),
-          to: uci.slice(2, 4),
-          promotion: uci[4] || undefined,
-        })
-        running = snapshot
-        const shown = new Chess(snapshot.fen())
-        later(() => setBoard(shown), delay)
-        delay += 500
-      }
-    },
-    [later],
-  )
-
   // Giving up is a real thing people do, and without it the only way out of a
   // puzzle you cannot see is to guess wrong on purpose or skip it, which is
   // worse: the drill list would never learn you were stuck on this one.
@@ -340,7 +337,7 @@ export default function Puzzles({ shared }) {
     if (phase !== 'solving' || !puzzle || !board) return
     setPhase('failed')
     record(puzzle.id, false, hintsUsed.current)
-    revealFrom(new Chess(board.fen()), puzzle.solution, step)
+    setAnswer(buildLine(new Chess(board.fen()), puzzle.solution, step))
   }
 
   const tryMove = (from, to) => {
@@ -366,7 +363,7 @@ export default function Puzzles({ shared }) {
       setPhase('failed')
       record(puzzle.id, false, hintsUsed.current)
       const truth = new Chess(board.fen())
-      revealFrom(truth, puzzle.solution, step)
+      setAnswer(buildLine(truth, puzzle.solution, step))
       return true
     }
 
@@ -707,6 +704,7 @@ export default function Puzzles({ shared }) {
                     <dd>{titleCase(puzzle.phase)}</dd>
                   </div>
                 </dl>
+                {phase === 'failed' && <MoveNavigator line={answer} nav={nav} />}
                 {(phase === 'solved' || phase === 'failed') && puzzle.explanation && (
                   <div className="explain">
                     <p className="headline">{puzzle.explanation.headline}</p>
