@@ -1232,11 +1232,14 @@ button {
   padding-bottom: 0;
 }
 
+/* The link and the save star sit in a panel header full of labels, so at the
+   faint ink they read as labels too. They are actions. Softer than body text,
+   brighter than a label, which is where a secondary control belongs. */
 .star {
   padding: 0.2rem 0.5rem;
   border: 0;
   background: none;
-  color: var(--ink-faint);
+  color: var(--ink-soft);
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
