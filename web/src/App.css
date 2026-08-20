@@ -710,6 +710,21 @@ button {
   color: var(--ink-soft);
 }
 
+/* The two controls in the footer are buttons because they do something rather
+   than go somewhere, but they sit in a row of links and were the only items in
+   it without an underline, which made them read as labels between the links. */
+.foot button {
+  color: var(--ink-soft);
+  font-size: inherit;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.foot button:hover {
+  color: var(--ink);
+}
+
 .error {
   margin-top: 1rem;
   padding: 0.6rem 0.85rem;
@@ -1213,11 +1228,15 @@ button {
 /* Saving a puzzle. The star sits in the panel header rather than with the
    actions, because it is a property of the puzzle rather than a thing to do
    next, and it stays available whether you are solving or done. */
+/* Every block inside the panel is inset by the same 0.75rem as .meta. The
+   header and the answer block used to have none, so "This puzzle" and the move
+   list sat flush against the border. Text should never touch the edge of the
+   thing containing it. */
 .record-head {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding-right: 0.25rem;
+  padding: 0.5rem 0.75rem 0;
 }
 
 .record-head h3 {
@@ -1243,6 +1262,15 @@ button {
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
+}
+
+/* The text one is a word, not a glyph, so it is underlined like every other
+   piece of text on the site that does something when clicked. The star keeps
+   its shape as the affordance. */
+.star.word {
+  font-size: 0.95rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .star:hover {
@@ -1487,7 +1515,7 @@ button {
    was; this stays, and it is in the notation a player reads. */
 .answer {
   margin-top: 0.9rem;
-  padding-top: 0.9rem;
+  padding: 0.9rem 0.75rem 0.75rem;
   border-top: 1px solid var(--line);
 }
 
@@ -1551,6 +1579,7 @@ button {
 .answer-nav {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   margin-top: 0.7rem;
 }

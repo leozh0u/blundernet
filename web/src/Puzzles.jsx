@@ -691,7 +691,7 @@ export default function Puzzles({ shared }) {
               <div className="record">
                 <div className="record-head">
                   <h3>This puzzle</h3>
-                  <button className="star" onClick={share} title="Copy a link to this puzzle">
+                  <button className="star word" onClick={share} title="Copy a link to this puzzle">
                     {copied ? 'copied' : 'link'}
                   </button>
                   <button
@@ -742,13 +742,15 @@ export default function Puzzles({ shared }) {
 
             {(phase === 'solved' || phase === 'failed') && (
               <div className="after">
-                {/* The line used to play itself the moment you got it wrong,
-                    which showed the answer but took the choice away and left
-                    nothing to press if you wanted to see it again. A button
-                    does the same thing on request, as many times as you like. */}
-                <button className="wide" onClick={nav.play}>
-                  {phase === 'failed' ? 'Play the answer' : 'Replay the line'}
-                </button>
+                {/* Only after a miss. There the button is how you see the
+                    answer at all, which the line used to do by itself. After a
+                    solve it would duplicate the back arrow sitting right above
+                    it, and a second way to do the same thing is not a feature. */}
+                {phase === 'failed' && (
+                  <button className="wide" onClick={nav.play}>
+                    Play the answer
+                  </button>
+                )}
                 <button className="wide" onClick={next}>
                   Next puzzle
                 </button>
