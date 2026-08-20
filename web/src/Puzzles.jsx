@@ -3,7 +3,7 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import BoardOverlay from './BoardOverlay.jsx'
 import { sound } from './sound.js'
-import { buildLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
+import { puzzleLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -113,10 +113,10 @@ export default function Puzzles({ shared }) {
   const hintsUsed = useRef(0)
   const [saved, setSaved] = useState(false)
   const [verdict, setVerdict] = useState(null)
-  // The line to walk once the puzzle is over. Learning mode used to animate
-  // the answer once and stop, which shows the moves but not the positions
-  // between them, and the one worth looking at is usually two plies back.
-  const [answer, setAnswer] = useState(null)
+  // Every position this puzzle has been through, walkable at any moment. It
+  // used to appear only after a miss, but stepping back to see why a move
+  // works is just as useful mid-solve and after a win.
+  const [revealed, setRevealed] = useState(false)
   const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
@@ -130,9 +130,20 @@ export default function Puzzles({ shared }) {
   // Every delayed board update is cancellable, because moving on to the next
   // puzzle while the opponent's reply is still pending would otherwise play
   // that reply onto the new position.
-  const nav = useAnswerLine(answer)
+  // Solving: the line is what has been played so far and the cursor rides the
+  // end. Over: the whole solution, and the cursor stays wherever it is put.
+  const over = phase === 'solved' || phase === 'failed'
+  const line = useMemo(
+    () => puzzleLine(puzzle, over || revealed ? puzzle?.solution?.length ?? 0 : step),
+    [puzzle, step, over, revealed],
+  )
+  const nav = useAnswerLine(line, { startAtEnd: true })
+  // Pieces only move from the live position. Dragging while reading history
+  // would apply a move to a position the puzzle is not actually on.
+  const live = nav.atEnd
 
-  // The board follows the cursor while an answer is on screen.
+  // The board is whatever the cursor points at. One source of truth, so a
+  // move, an arrow key and a click on the written line cannot disagree.
   useEffect(() => {
     if (nav.fen) setBoard(new Chess(nav.fen))
   }, [nav.fen])
@@ -183,7 +194,7 @@ export default function Puzzles({ shared }) {
       // A new puzzle retires any answer still on screen. Without this the
       // board keeps following the old line's cursor instead of the new
       // position, and the arrow keys stay bound to a puzzle that is gone.
-      setAnswer(null)
+      setRevealed(false)
       hintsUsed.current = 0
       setSaved(!!p.saved)
       setPhase('setup')
@@ -337,11 +348,13 @@ export default function Puzzles({ shared }) {
     if (phase !== 'solving' || !puzzle || !board) return
     setPhase('failed')
     record(puzzle.id, false, hintsUsed.current)
-    setAnswer(buildLine(new Chess(board.fen()), puzzle.solution, step))
+    setRevealed(true)
   }
 
   const tryMove = (from, to) => {
-    if (phase !== 'solving' || !puzzle || !board) return false
+    // Not while reading history: the board on screen is a past position and a
+    // move made from it would be graded against the wrong step.
+    if (!live || phase !== 'solving' || !puzzle || !board) return false
     const probe = new Chess(board.fen())
     let mv
     try {
@@ -363,7 +376,7 @@ export default function Puzzles({ shared }) {
       setPhase('failed')
       record(puzzle.id, false, hintsUsed.current)
       const truth = new Chess(board.fen())
-      setAnswer(buildLine(truth, puzzle.solution, step))
+      setRevealed(true)
       return true
     }
 
@@ -422,7 +435,7 @@ export default function Puzzles({ shared }) {
   }
 
   const onSquareClick = (square) => {
-    if (phase !== 'solving' || !board) return
+    if (!live || phase !== 'solving' || !board) return
     if (selected === square) return setSelected(null)
     if (selected && tryMove(selected, square)) return
     const piece = board.get(square)
@@ -643,7 +656,7 @@ export default function Puzzles({ shared }) {
                 onPieceDrop={(f, t) => tryMove(f, t)}
                 onSquareClick={onSquareClick}
                 boardOrientation={puzzle?.color || 'white'}
-                arePiecesDraggable={phase === 'solving'}
+                arePiecesDraggable={live && phase === 'solving'}
                 customBoardStyle={{ borderRadius: '6px' }}
                 customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
                 customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
@@ -704,7 +717,7 @@ export default function Puzzles({ shared }) {
                     <dd>{titleCase(puzzle.phase)}</dd>
                   </div>
                 </dl>
-                {phase === 'failed' && <MoveNavigator line={answer} nav={nav} />}
+                <MoveNavigator line={line} nav={nav} heading={over ? 'The answer' : 'Moves so far'} />
                 {(phase === 'solved' || phase === 'failed') && puzzle.explanation && (
                   <div className="explain">
                     <p className="headline">{puzzle.explanation.headline}</p>

@@ -11,6 +11,46 @@ import { Chess } from 'chess.js'
 // keys and clicking a move are then three ways of moving the same cursor
 // rather than three features that have to agree with each other.
 
+// puzzleLine builds the walkable history of a puzzle: its starting position,
+// the opponent move that sets it up, and however much of the solution has been
+// played so far. Passing the whole solution length gives the finished puzzle.
+//
+// Derived rather than accumulated. The board is replaced on every move, on
+// every hint and on a reveal, so a separate list of positions kept alongside
+// it would be a second source of truth with several chances to disagree. The
+// puzzle and how far into it you are is all the information there is.
+export function puzzleLine(puzzle, played) {
+  if (!puzzle) return null
+  const board = new Chess(puzzle.fen)
+  const setup = puzzle.setup_move
+  const fens = [board.fen()]
+  const moves = []
+  const push = (uci) => {
+    let mv
+    try {
+      mv = board.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci[4] || undefined,
+      })
+    } catch {
+      return false
+    }
+    const white = mv.color === 'w'
+    const number = white ? board.moveNumber() : board.moveNumber() - 1
+    moves.push({ san: mv.san, white, number, lead: moves.length === 0 && !white })
+    fens.push(board.fen())
+    return true
+  }
+  // The setup move is part of the story: it is the mistake the puzzle is
+  // about, and walking back to see it is most of the point of walking back.
+  if (setup && !push(setup)) return { moves, fens }
+  for (let i = 0; i < Math.min(played, puzzle.solution.length); i++) {
+    if (!push(puzzle.solution[i])) break
+  }
+  return { moves, fens }
+}
+
 // buildLine replays the solution from a position and keeps every step.
 // fens[0] is the position before the first correct move, so cursor n means n
 // plies of the answer have been played.
@@ -44,15 +84,25 @@ export function buildLine(position, solution, from) {
 
 // useAnswerLine owns the cursor for a line, including the one-time playthrough
 // and the keyboard. Pass null when there is no answer on screen.
-export function useAnswerLine(line) {
-  const [cursor, setCursor] = useState(0)
-  const [autoplay, setAutoplay] = useState(true)
+// useAnswerLine owns the cursor for a line.
+//
+// startAtEnd is what separates the two uses. A puzzle you are still solving
+// should sit at the live position with history behind it, so the cursor starts
+// at the end and nothing plays itself. An answer you just missed should start
+// at the beginning and play through once.
+export function useAnswerLine(line, { startAtEnd = false } = {}) {
+  const end = line ? line.fens.length - 1 : 0
+  const [cursor, setCursor] = useState(startAtEnd ? end : 0)
+  const [autoplay, setAutoplay] = useState(!startAtEnd)
 
-  // A new line starts from the beginning and plays itself once.
+  // The line grows as moves are played. Sitting at the end means "follow the
+  // game"; sitting behind it means the reader has stepped back on purpose and
+  // should not be yanked forward by the next move.
   useEffect(() => {
-    setCursor(0)
-    setAutoplay(true)
-  }, [line])
+    if (!line) return
+    setCursor((c) => (startAtEnd ? (c >= line.fens.length - 2 ? line.fens.length - 1 : c) : 0))
+    setAutoplay(!startAtEnd)
+  }, [line, startAtEnd])
 
   const atStart = cursor === 0
   const atEnd = !line || cursor >= line.fens.length - 1
