@@ -171,8 +171,6 @@ for attempt in $(seq 1 60); do
   echo "image pull failed (attempt $attempt), retrying in 30s"
   sleep 30
 done
-docker compose -f /opt/blundernet/compose.yaml up -d
-
 # Re-pull and restart on boot so the stack survives reboots and picks up
 # newly pushed images.
 cat >/etc/systemd/system/blundernet.service <<'UNIT'
@@ -191,7 +189,11 @@ ExecStop=/usr/bin/docker compose -f /opt/blundernet/compose.yaml down
 [Install]
 WantedBy=multi-user.target
 UNIT
-systemctl enable blundernet.service
+# Started through systemd rather than by calling compose directly, so the unit
+# actually records itself as running. Doing it by hand first left the unit
+# enabled but inactive, which made `systemctl is-active` report a healthy stack
+# as down and gave the deploy script a false failure to report.
+systemctl enable --now blundernet.service
 
 # Nightly database backup to S3. Installed here rather than by hand, so a
 # replaced instance comes back with its backups still running: a backup that
