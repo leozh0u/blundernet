@@ -65,6 +65,7 @@ type Server struct {
 	puzzles       *store.Puzzles
 	seen          *store.Seen
 	ranked        *store.Ranked
+	feedback      *store.Feedback
 	streak        *store.Streak
 	sessions      *store.Sessions
 	jobs          Enqueuer
@@ -92,6 +93,11 @@ func New(d Deps) *Server {
 		secureCookies: d.SecureCookies, trustProxy: d.TrustProxy,
 		sessionTTL: d.SessionTTL, limits: d.Limits.withDefaults(),
 	}
+	// Feedback shares the archive's pool rather than taking its own dependency,
+	// because it is one table and a connection pool per table is not a design.
+	if d.Archive != nil {
+		s.feedback = store.NewFeedback(d.Archive.Pool())
+	}
 	if d.Redis != nil {
 		s.limiter = store.NewLimiter(d.Redis)
 		s.seen = store.NewSeen(d.Redis)
@@ -107,6 +113,7 @@ func New(d Deps) *Server {
 	// guessing it is the obvious attack on this endpoint.
 	mux.HandleFunc("POST /api/auth/recover", s.limit("auth", s.limits.Auth, s.handleRecover))
 	mux.HandleFunc("POST /api/auth/recovery-code", s.limit("auth", s.limits.Auth, s.handleNewRecoveryCode))
+	mux.HandleFunc("POST /api/feedback", s.limit("auth", s.limits.Auth, s.handleFeedback))
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", s.handleMe)
 	mux.HandleFunc("POST /api/games", s.limit("create", s.limits.CreateGame, s.handleCreate))

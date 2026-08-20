@@ -382,3 +382,35 @@ func atoiDefault(s string, def int) int {
 	}
 	return n
 }
+
+// handleFeedback takes a bug report. Deliberately open to anybody: the person
+// most likely to hit a bug is the one who just arrived, has no account, and
+// will not make one to tell you the board did not load.
+//
+// That makes it an unauthenticated write, so it sits behind the auth limiter,
+// which is the strictest one here. The store caps the length; this only has to
+// refuse the empty case, because a blank report is a misclick rather than a
+// message.
+func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
+	if s.feedback == nil {
+		httpError(w, http.StatusServiceUnavailable, "feedback is not configured")
+		return
+	}
+	var body struct {
+		Message string `json:"message"`
+		Page    string `json:"page"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "body must be {\"message\": \"\"}")
+		return
+	}
+	if strings.TrimSpace(body.Message) == "" {
+		httpError(w, http.StatusBadRequest, "a message is required")
+		return
+	}
+	if err := s.feedback.Add(r.Context(), userID(r), body.Message, body.Page); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

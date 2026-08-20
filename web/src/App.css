@@ -1687,3 +1687,26 @@ button {
   display: block;
   margin-bottom: 0.5rem;
 }
+
+/* The bug report box. A textarea rather than a single line, because the useful
+   reports are the ones with a sentence of context in them and a one-line field
+   asks for three words. */
+.modal textarea {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.modal textarea:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.modal textarea::placeholder {
+  color: var(--ink-faint);
+}

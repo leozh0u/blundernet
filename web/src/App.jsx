@@ -10,6 +10,7 @@ import Streak from './Streak.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
 import Logo from './Logo.jsx'
 import { sound } from './sound.js'
+import Feedback from './Feedback.jsx'
 
 const api = {
   async createGame(color, mode, level) {
@@ -771,6 +772,8 @@ export default function App() {
       {error && <div className="error">{error}</div>}
 
       <footer className="foot">
+        <Feedback />
+        <span aria-hidden="true"> · </span>
         <SoundToggle />
         <span aria-hidden="true"> · </span>
         <a href="https://github.com/leozh0u/blundernet">Source</a>
