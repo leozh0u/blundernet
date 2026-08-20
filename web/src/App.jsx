@@ -161,23 +161,46 @@ const PATHS = {
   me: '/me',
 }
 
-// The sound switch. Sound defaults on because a chess board that clicks is
-// what people expect, and it is one click and a remembered preference to turn
-// off. Rendered as a real button with pressed state rather than an icon, so it
-// says what it will do rather than needing to be guessed at.
+// The sound switch, in the top bar where a player looks for it mid-game
+// rather than at the bottom of the page.
+//
+// An icon rather than a word here, because the bar is a row of destinations
+// and a sentence in it reads as another place to go. The speaker is the one
+// icon that needs no label: everybody has met it. The waves are drawn or not
+// drawn rather than being crossed out, so the state is the picture rather than
+// a mark on top of it, and the accessible name still says what a click does.
 function SoundToggle() {
   const [on, setOn] = useState(sound.enabled())
   return (
     <button
       type="button"
-      className="link quiet"
+      className="soundbtn"
       aria-pressed={on}
+      title={on ? 'Sound on. Click to mute.' : 'Sound off. Click to unmute.'}
       onClick={() => {
         sound.setEnabled(!on)
         setOn(!on)
       }}
     >
-      {on ? 'Sound on' : 'Sound off'}
+      <span className="visually-hidden">{on ? 'Mute sound' : 'Unmute sound'}</span>
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        {/* The speaker body: one path, filled, so it reads at 20px. */}
+        <path
+          d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+        {on ? (
+          <>
+            <path d="M15.5 9.2a4 4 0 0 1 0 5.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            <path d="M18 6.8a7.5 7.5 0 0 1 0 10.4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          </>
+        ) : (
+          <path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        )}
+      </svg>
     </button>
   )
 }
@@ -422,6 +445,7 @@ export default function App() {
           </button>
         </nav>
         <Account refreshKey={ratingKey} />
+        <SoundToggle />
       </header>
 
       {route === 'me' ? (
@@ -574,7 +598,7 @@ export default function App() {
                       of them, which it is not. */}
                   <dd>
                     {mine ? Math.round(mine.rating) : '...'}
-                    {mine?.provisional && (
+                    {mine?.provisional && mine.rated_games > 0 && (
                       <i className="prov" title="Provisional until five rated games">
                         ?
                       </i>
@@ -775,8 +799,6 @@ export default function App() {
 
       <footer className="foot">
         <Feedback />
-        <span aria-hidden="true"> · </span>
-        <SoundToggle />
         <span aria-hidden="true"> · </span>
         <a href="https://github.com/leozh0u/blundernet">Source</a>
         <span aria-hidden="true"> · </span>

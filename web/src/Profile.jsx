@@ -62,7 +62,14 @@ export default function Profile({ onDrill }) {
               <dt>Rating</dt>
               <dd>
                 {fmt(profile?.rating)}
-                {profile?.provisional && <i className="prov">?</i>}
+                {/* Only once something has been measured. At zero rated games
+                    the number is a starting point, not a provisional reading of
+                    anybody, and the games count directly below says as much. */}
+                {profile?.provisional && profile.rated_games > 0 && (
+                  <i className="prov" title="Provisional until five rated games">
+                    ?
+                  </i>
+                )}
               </dd>
             </div>
             <div>

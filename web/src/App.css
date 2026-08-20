@@ -712,8 +712,11 @@ button {
 
 /* The two controls in the footer are buttons because they do something rather
    than go somewhere, but they sit in a row of links and were the only items in
-   it without an underline, which made them read as labels between the links. */
-.foot button {
+   it without an underline, which made them read as labels between the links.
+   Written as button.link so it outweighs .link.quiet, which is two classes and
+   was otherwise still painting them a shade darker than everything beside
+   them. Matching underline, mismatched colour is worse than neither. */
+.foot button.link {
   color: var(--ink-soft);
   font-size: inherit;
   font-weight: 400;
@@ -721,7 +724,7 @@ button {
   text-underline-offset: 0.2em;
 }
 
-.foot button:hover {
+.foot button.link:hover {
   color: var(--ink);
 }
 
@@ -1752,4 +1755,36 @@ button {
   border-top: 1px solid var(--line);
   font-size: 0.9rem;
   color: var(--ink-faint);
+}
+
+/* The sound switch in the top bar. Sized to the row rather than to the icon,
+   so it has a real tap target on a phone without drawing a box around itself. */
+.soundbtn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.soundbtn:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.soundbtn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Muted is a state worth seeing at a glance, so it is dimmer than merely
+   unhovered rather than relying on the crossed-out waves alone. */
+.soundbtn[aria-pressed='false'] {
+  color: var(--line-strong);
 }
