@@ -219,4 +219,3 @@ func TestFriendGameSeatsTwoAndOnlyTwo(t *testing.T) {
 		t.Errorf("spectator move: %d, want 403", code)
 	}
 }
-
