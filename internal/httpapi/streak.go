@@ -54,15 +54,27 @@ func (s *Server) handleStreakStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		p, ok, err := s.puzzles.ByID(r.Context(), state.PuzzleID)
-		if err != nil {
-			internalError(w, err)
-			return
+		// A run with a puzzle still on it is resumed rather than redrawn: a
+		// fresh puzzle on every request would let somebody reload past
+		// anything they did not like.
+		if state.PuzzleID != "" {
+			p, ok, err := s.puzzles.ByID(r.Context(), state.PuzzleID)
+			if err != nil {
+				internalError(w, err)
+				return
+			}
+			if ok {
+				s.writeStreak(w, r, user.ID, p, state)
+				return
+			}
 		}
-		if ok {
-			s.writeStreak(w, r, user.ID, p, state)
-			return
-		}
+		// A run between puzzles, which is where a solve leaves it. The next
+		// one is drawn against the run's own state, so the count survives and
+		// the rung is one higher. Starting a fresh state here was the second
+		// half of the loop bug: even once the id was cleared, the run would
+		// have restarted at zero.
+		s.nextStreakPuzzle(w, r, user.ID, state)
+		return
 	}
 	s.nextStreakPuzzle(w, r, user.ID, store.StreakState{Started: time.Now()})
 }
@@ -195,8 +207,14 @@ func (s *Server) handleStreakMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Solved: the run is one longer and the next puzzle is one rung harder.
+	//
+	// Clearing PuzzleID is the part that matters. It used to be left pointing
+	// at the puzzle just solved, and the next request found a run in progress,
+	// looked that id up, and handed back the same puzzle again. A run could
+	// therefore never leave its first puzzle. Reported from the live site.
 	state.Count++
 	state.Step = 0
+	state.PuzzleID = ""
 	if err := s.streak.Set(r.Context(), user.ID, state); err != nil {
 		internalError(w, err)
 		return

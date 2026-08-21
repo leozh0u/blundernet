@@ -82,6 +82,18 @@ func testPuzzles() []puzzle.Puzzle {
 		}
 		out = append(out, p)
 	}
+	// A handful down at the rung a streak starts on. Without these the streak
+	// tests cannot draw anything: a run opens at 700 and widens to 950 at
+	// most, and everything above is rated 1450 or 2050.
+	for i := 0; i < 8; i++ {
+		out = append(out, puzzle.Puzzle{
+			ID:     fmt.Sprintf("easy%02d", i),
+			FEN:    "r6k/pp2r2p/4Rp1Q/3p4/8/1N1P2R1/PqP2bPP/7K b - - 0 24",
+			Moves:  []string{"f2g3", "e6e7", "b2b1", "b3c1"},
+			Rating: 700, Popularity: 90, SolutionPlies: 3,
+			Phase: puzzle.PhaseMiddlegame, Themes: []string{"fork"},
+		})
+	}
 	return out
 }
 
@@ -458,4 +470,69 @@ func TestFavouritesAreEmptyWhenSignedOut(t *testing.T) {
 	if rec.Code != http.StatusOK || len(list.Puzzles) != 0 {
 		t.Fatalf("got %d %s", rec.Code, rec.Body)
 	}
+}
+
+// A solved streak puzzle must be replaced by a different one, and the run has
+// to survive the swap. Both halves of this were broken on the live site: the
+// solve left the old puzzle id in the run, so the next request handed back the
+// same puzzle forever, and the fallback that should have drawn a new one built
+// a fresh run and would have thrown the count away.
+func TestStreakAdvancesAfterASolve(t *testing.T) {
+	s := newPuzzleServer(t)
+	jar := signUp(t, s, "streaker")
+
+	var start struct {
+		ID       string   `json:"id"`
+		Count    int      `json:"count"`
+		Moves    int      `json:"moves"`
+		Step     int      `json:"step"`
+		Solution []string `json:"solution"`
+	}
+	rec := asUser(s, jar, "POST", "/api/puzzles/streak", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("start streak: %d %s", rec.Code, rec.Body)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &start); err != nil {
+		t.Fatal(err)
+	}
+
+	// The solution never leaves the server in streak mode, so the moves come
+	// from the corpus rather than the response.
+	sol := solutionOf(t, s, start.ID)
+	for i := 0; i < len(sol); i += 2 {
+		body := `{"uci":"` + sol[i] + `","ms":100}`
+		mv := asUser(s, jar, "POST", "/api/puzzles/streak/move", body)
+		if mv.Code != http.StatusOK {
+			t.Fatalf("move %d: %d %s", i, mv.Code, mv.Body)
+		}
+	}
+
+	next := asUser(s, jar, "POST", "/api/puzzles/streak", "")
+	if next.Code != http.StatusOK {
+		t.Fatalf("next streak puzzle: %d %s", next.Code, next.Body)
+	}
+	var after struct {
+		ID    string `json:"id"`
+		Count int    `json:"count"`
+	}
+	if err := json.Unmarshal(next.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.ID == start.ID {
+		t.Fatalf("streak handed back the same puzzle after solving it: %s", after.ID)
+	}
+	if after.Count != start.Count+1 {
+		t.Fatalf("run count did not survive the swap: %d -> %d", start.Count, after.Count)
+	}
+}
+
+// solutionOf reads a puzzle's line straight out of the store, because streak
+// mode deliberately never sends it to the client.
+func solutionOf(t *testing.T, s *Server, id string) []string {
+	t.Helper()
+	p, ok, err := s.puzzles.ByID(context.Background(), id)
+	if err != nil || !ok {
+		t.Fatalf("look up %s: %v", id, err)
+	}
+	return p.Solution()
 }
