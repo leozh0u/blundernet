@@ -91,7 +91,10 @@ func testPuzzles() []puzzle.Puzzle {
 			FEN:    "r6k/pp2r2p/4Rp1Q/3p4/8/1N1P2R1/PqP2bPP/7K b - - 0 24",
 			Moves:  []string{"f2g3", "e6e7", "b2b1", "b3c1"},
 			Rating: 700, Popularity: 90, SolutionPlies: 3,
-			Phase: puzzle.PhaseMiddlegame, Themes: []string{"fork"},
+			// Their own theme on purpose. Putting them in "fork" would change a
+			// count another test asserts on, and a fixture that quietly moves
+			// someone else's numbers is worse than no fixture.
+			Phase: puzzle.PhaseMiddlegame, Themes: []string{"hangingPiece"},
 		})
 	}
 	return out
