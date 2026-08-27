@@ -30,6 +30,7 @@ var (
 	ErrAlreadyIn   = errors.New("already a member of that classroom")
 	ErrLastCoach   = errors.New("a classroom keeps at least one coach")
 	ErrCodeClashes = errors.New("could not allocate a join code")
+	ErrBadName     = errors.New("a classroom needs a name of 1 to 60 characters")
 )
 
 const (
@@ -102,9 +103,11 @@ func NormaliseJoinCode(s string) string {
 
 // Create opens a classroom with the caller as its first coach.
 func (c *Classrooms) Create(ctx context.Context, userID, name string) (*Classroom, error) {
+	// Trimmed before measuring, so a name of sixty spaces is refused here
+	// rather than by the table's own CHECK, which would surface as a 500.
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, errors.New("a classroom needs a name")
+	if n := len([]rune(name)); n == 0 || n > 60 {
+		return nil, ErrBadName
 	}
 	guest, err := c.isGuest(ctx, userID)
 	if err != nil {

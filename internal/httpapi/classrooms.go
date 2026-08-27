@@ -74,6 +74,8 @@ func classroomError(w http.ResponseWriter, err error) {
 		httpError(w, http.StatusConflict, "you are already in that classroom")
 	case errors.Is(err, store.ErrLastCoach):
 		httpError(w, http.StatusConflict, "a classroom keeps at least one coach")
+	case errors.Is(err, store.ErrBadName):
+		httpError(w, http.StatusBadRequest, "a classroom name is 1 to 60 characters")
 	default:
 		internalError(w, err)
 	}
@@ -109,10 +111,8 @@ func (s *Server) handleClassroomCreate(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "bad request")
 		return
 	}
-	if n := len([]rune(body.Name)); n == 0 || n > 60 {
-		httpError(w, http.StatusBadRequest, "a classroom name is 1 to 60 characters")
-		return
-	}
+	// Length is not checked here. The store trims and checks, and a second
+	// copy of the rule in front of it is a second copy to disagree with.
 	room, err := s.classrooms.Create(r.Context(), user.ID, body.Name)
 	if err != nil {
 		classroomError(w, err)
