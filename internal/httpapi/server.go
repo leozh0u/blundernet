@@ -66,6 +66,7 @@ type Server struct {
 	seen          *store.Seen
 	ranked        *store.Ranked
 	feedback      *store.Feedback
+	classrooms    *store.Classrooms
 	streak        *store.Streak
 	sessions      *store.Sessions
 	jobs          Enqueuer
@@ -97,6 +98,7 @@ func New(d Deps) *Server {
 	// because it is one table and a connection pool per table is not a design.
 	if d.Archive != nil {
 		s.feedback = store.NewFeedback(d.Archive.Pool())
+		s.classrooms = store.NewClassrooms(d.Archive.Pool())
 	}
 	if d.Redis != nil {
 		s.limiter = store.NewLimiter(d.Redis)
@@ -139,6 +141,14 @@ func New(d Deps) *Server {
 	mux.HandleFunc("POST /api/puzzles/streak/move", s.limit("move", s.limits.Move, s.handleStreakMove))
 	mux.HandleFunc("GET /api/puzzles/{id}", s.handlePuzzleByID)
 	mux.HandleFunc("POST /api/puzzles/{id}/attempt", s.limit("attempt", s.limits.Move, s.handlePuzzleAttempt))
+	// A join code is a bearer credential, so joining is limited on the same
+	// bucket as login rather than on the cheaper puzzle one.
+	mux.HandleFunc("POST /api/classrooms", s.limit("create", s.limits.CreateGame, s.handleClassroomCreate))
+	mux.HandleFunc("GET /api/classrooms", s.handleClassroomList)
+	mux.HandleFunc("POST /api/classrooms/join", s.limit("auth", s.limits.Auth, s.handleClassroomJoin))
+	mux.HandleFunc("GET /api/classrooms/{id}", s.handleClassroomGet)
+	mux.HandleFunc("POST /api/classrooms/{id}/code", s.limit("create", s.limits.CreateGame, s.handleClassroomRotate))
+	mux.HandleFunc("DELETE /api/classrooms/{id}/members/{user}", s.handleClassroomRemove)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/me/profile", s.handleProfile)
 	mux.HandleFunc("GET /api/me/games", s.handleHistory)
