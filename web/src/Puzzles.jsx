@@ -94,6 +94,9 @@ const uciOf = (mv) => mv.from + mv.to + (mv.promotion || '')
 
 const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }
 
+// How long one move takes to slide, matching react-chessboard's own default.
+const MOVE_MS = 300
+
 export default function Puzzles({ shared }) {
   const [filter, setFilter] = useState(filterFromURL)
   const [queue, setQueue] = useState([])
@@ -124,6 +127,10 @@ export default function Puzzles({ shared }) {
     () => new URLSearchParams(window.location.search).get('drill') || 'search',
   )
   const [error, setError] = useState('')
+  // How long the board takes to show the position it was just handed, and
+  // which position it was on last, so a step can be told from a jump.
+  const [animateMs, setAnimateMs] = useState(MOVE_MS)
+  const lastCursor = useRef(0)
   const startedAt = useRef(0)
   const timers = useRef([])
 
@@ -144,9 +151,17 @@ export default function Puzzles({ shared }) {
 
   // The board is whatever the cursor points at. One source of truth, so a
   // move, an arrow key and a click on the written line cannot disagree.
+  //
+  // Animation is decided here too, because only this knows how far the board
+  // just travelled. One ply forward is a move and looks like one. Anything
+  // else is a jump, and animating a jump slides every piece across the board
+  // at once, which is what "play the answer" from the end used to do.
   useEffect(() => {
-    if (nav.fen) setBoard(new Chess(nav.fen))
-  }, [nav.fen])
+    if (!nav.fen) return
+    setAnimateMs(nav.cursor === lastCursor.current + 1 ? MOVE_MS : 0)
+    lastCursor.current = nav.cursor
+    setBoard(new Chess(nav.fen))
+  }, [nav.fen, nav.cursor])
 
   const later = useCallback((fn, ms) => {
     const id = setTimeout(fn, ms)
@@ -195,6 +210,9 @@ export default function Puzzles({ shared }) {
       // board keeps following the old line's cursor instead of the new
       // position, and the arrow keys stay bound to a puzzle that is gone.
       setRevealed(false)
+      // A new puzzle starts at its own first position, so the blunder that
+      // sets it up is one step forward from there and animates like a move.
+      lastCursor.current = 0
       hintsUsed.current = 0
       setSaved(!!p.saved)
       setPhase('setup')
@@ -664,6 +682,7 @@ export default function Puzzles({ shared }) {
                 position={board ? board.fen() : 'start'}
                 onPieceDrop={(f, t) => tryMove(f, t)}
                 onSquareClick={onSquareClick}
+                animationDuration={animateMs}
                 boardOrientation={puzzle?.color || 'white'}
                 arePiecesDraggable={live && phase === 'solving'}
                 customBoardStyle={{ borderRadius: '6px' }}
