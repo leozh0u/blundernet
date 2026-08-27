@@ -369,7 +369,12 @@ export default function Puzzles({ shared }) {
     // Exact match, or any move that is mate. A second mate in one is still a
     // solved puzzle, and refusing it would be the site being wrong.
     const right = uciOf(mv) === want || probe.isCheckmate()
+    // Cleared here rather than on the way to the next move, so that a wrong
+    // answer loses its mark too. It used to be cleared only by the move that
+    // followed a right one, which meant the red cross sat on the board until
+    // the next puzzle.
     setVerdict({ square: to, good: right })
+    later(() => setVerdict(null), 900)
     if (!right) {
       sound.fail()
       setBoard(probe)
@@ -390,7 +395,6 @@ export default function Puzzles({ shared }) {
   // place and only differ in what gets recorded.
   const playSolutionMove = () => {
     const want = puzzle.solution[step]
-    later(() => setVerdict(null), 900)
     const played = new Chess(board.fen())
     const mv = played.move({
       from: want.slice(0, 2),
