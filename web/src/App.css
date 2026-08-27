@@ -1306,6 +1306,198 @@ button {
   color: var(--blue);
 }
 
+/* ---------- classrooms ---------- */
+/* A table and two forms. Nothing here invents a component: the roster is a
+   table because it is tabular, and the forms use the same row-with-a-button
+   shape the rest of the site already uses. */
+.rooms {
+  max-width: 44rem;
+  padding-top: 0.5rem;
+}
+
+.rooms-note {
+  max-width: 38rem;
+  color: var(--ink-soft);
+}
+
+.rooms-error {
+  margin: 0.75rem 0;
+  color: var(--danger);
+}
+
+.rooms .back {
+  margin-bottom: 1rem;
+}
+
+.room-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.room-head h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.room-role {
+  color: var(--ink-faint);
+  font-size: 0.95rem;
+}
+
+/* The code is the thing a coach came to this page for, so it is the largest
+   text on it and sits in its own block rather than in a row of labels. */
+.room-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 1.5rem;
+}
+
+.room-code-label {
+  display: block;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.room-code strong {
+  font-family: var(--mono);
+  font-size: 1.6rem;
+  letter-spacing: 0.08em;
+}
+
+.room-code-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.roster {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.roster th {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.roster td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.roster .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.roster .tag {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius);
+  background: var(--blue-wash);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.room-actions {
+  margin-top: 1.5rem;
+}
+
+.room-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.room-list button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.room-list button:hover {
+  border-color: var(--line-strong);
+}
+
+.room-name {
+  font-weight: 500;
+}
+
+.room-meta {
+  color: var(--ink-faint);
+  font-size: 0.92rem;
+}
+
+.room-forms {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 26rem;
+}
+
+.room-forms label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.room-forms .row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.room-forms input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font: inherit;
+}
+
+.room-forms #room-code {
+  font-family: var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.room-forms button {
+  width: auto;
+  flex: 0 0 auto;
+  padding-left: 1.2rem;
+  padding-right: 1.2rem;
+}
+
 /* Account page. Three cards for the three things the site keeps about you,
    each with the sentence that says what moves the numbers. */
 .profile .note {
