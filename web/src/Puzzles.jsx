@@ -97,6 +97,9 @@ const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen'
 // How long one move takes to slide, matching react-chessboard's own default.
 const MOVE_MS = 300
 
+// What stands in for a fact the puzzle is not telling you yet.
+const HIDDEN = '···'
+
 export default function Puzzles({ shared }) {
   const [filter, setFilter] = useState(filterFromURL)
   const [queue, setQueue] = useState([])
@@ -120,6 +123,10 @@ export default function Puzzles({ shared }) {
   // used to appear only after a miss, but stepping back to see why a move
   // works is just as useful mid-solve and after a win.
   const [revealed, setRevealed] = useState(false)
+  // Asking to see the puzzle's rating and length before solving it. Per
+  // puzzle, not a setting: the answer to "how hard is this one" is usually
+  // wanted about one puzzle in ten.
+  const [metaShown, setMetaShown] = useState(false)
   const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
@@ -140,6 +147,7 @@ export default function Puzzles({ shared }) {
   // Solving: the line is what has been played so far and the cursor rides the
   // end. Over: the whole solution, and the cursor stays wherever it is put.
   const over = phase === 'solved' || phase === 'failed'
+  const metaOpen = over || metaShown
   const line = useMemo(
     () => puzzleLine(puzzle, over || revealed ? puzzle?.solution?.length ?? 0 : step),
     [puzzle, step, over, revealed],
@@ -210,6 +218,7 @@ export default function Puzzles({ shared }) {
       // board keeps following the old line's cursor instead of the new
       // position, and the arrow keys stay bound to a puzzle that is gone.
       setRevealed(false)
+      setMetaShown(false)
       // A new puzzle starts at its own first position, so the blunder that
       // sets it up is one step forward from there and animates like a move.
       lastCursor.current = 0
@@ -731,20 +740,38 @@ export default function Puzzles({ shared }) {
                     {saved ? '★' : '☆'}
                   </button>
                 </div>
+                {/* Length is half the answer: told a puzzle is one move long
+                    you stop looking for a quiet second move, and told it is
+                    four you know the first capture is not the end of it. The
+                    rating says how hard to look. Both are worth reading after,
+                    and both are help before, so they are hidden until the
+                    puzzle is over or until somebody asks. Ranked already works
+                    this way, which is the other half of the argument. */}
                 <dl className="meta">
                   <div>
                     <dt>Rating</dt>
-                    <dd>{puzzle.rating}</dd>
+                    <dd>{metaOpen ? puzzle.rating : HIDDEN}</dd>
                   </div>
                   <div>
                     <dt>Length</dt>
-                    <dd>{puzzle.moves === 1 ? '1 move' : `${puzzle.moves} moves`}</dd>
+                    <dd>
+                      {metaOpen
+                        ? puzzle.moves === 1
+                          ? '1 move'
+                          : `${puzzle.moves} moves`
+                        : HIDDEN}
+                    </dd>
                   </div>
                   <div>
                     <dt>Phase</dt>
-                    <dd>{titleCase(puzzle.phase)}</dd>
+                    <dd>{metaOpen ? titleCase(puzzle.phase) : HIDDEN}</dd>
                   </div>
                 </dl>
+                {!metaOpen && (
+                  <button type="button" className="reveal-meta" onClick={() => setMetaShown(true)}>
+                    Show them anyway
+                  </button>
+                )}
                 <MoveNavigator line={line} nav={nav} heading={over ? 'The answer' : 'Moves so far'} />
                 {(phase === 'solved' || phase === 'failed') && puzzle.explanation && (
                   <div className="explain">

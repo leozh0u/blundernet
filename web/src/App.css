@@ -969,6 +969,28 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Sits under the hidden values it uncovers, inset to the same 0.75rem as
+   everything else in the panel. A word that does something, so it is
+   underlined like the other word buttons rather than dressed as a button:
+   it is the least important control on the page. */
+.reveal-meta {
+  display: block;
+  margin: 0;
+  padding: 0 0.75rem 0.5rem;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.reveal-meta:hover {
+  color: var(--ink);
+}
+
 .themes {
   padding: 0 0.75rem 0.75rem;
   font-size: 0.94rem;
