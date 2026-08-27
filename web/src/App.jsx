@@ -4,6 +4,7 @@ import { Chess } from 'chess.js'
 import SearchTree from './SearchTree.jsx'
 import Account from './Account.jsx'
 import Puzzles from './Puzzles.jsx'
+import Classrooms from './Classrooms.jsx'
 import Ranked from './Ranked.jsx'
 import Profile from './Profile.jsx'
 import Streak from './Streak.jsx'
@@ -139,11 +140,19 @@ function sharedGameID(path) {
 }
 
 function routeOf(path) {
+  if (path.startsWith('/classrooms')) return 'classrooms'
   if (path.startsWith('/puzzles/streak')) return 'streak'
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
   if (path.startsWith('/play')) return 'play'
   if (path.startsWith('/me')) return 'me'
   return 'puzzles'
+}
+
+// /classrooms/<uuid> opens one room. Same idea as a shared puzzle: the URL is
+// the state, so a coach can bookmark the class they look at every week.
+function openRoomID(path) {
+  const m = path.match(/^\/classrooms\/([-a-f0-9]{8,})$/)
+  return m ? m[1] : null
 }
 
 // /puzzles/<id> opens one puzzle by itself, which is what a shared link is.
@@ -154,6 +163,7 @@ function sharedPuzzleID(path) {
 }
 
 const PATHS = {
+  classrooms: '/classrooms',
   puzzles: '/',
   ranked: '/puzzles/ranked',
   streak: '/puzzles/streak',
@@ -207,6 +217,11 @@ function SoundToggle() {
 
 export default function App() {
   const [route, setRoute] = useState(() => routeOf(window.location.pathname))
+  // Which classroom is open, held as state rather than read from the path at
+  // render time. Pushing a path does not re-render anything by itself, so a
+  // component reading window.location during render would keep showing the
+  // room you just left.
+  const [roomID, setRoomID] = useState(() => openRoomID(window.location.pathname))
   const [state, setState] = useState(null)
   // Bumped when a game reaches a terminal state, which is the only moment the
   // rating can have moved. Polling the profile on a timer would be busywork.
@@ -271,7 +286,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const onPop = () => setRoute(routeOf(window.location.pathname))
+    const onPop = () => {
+      setRoute(routeOf(window.location.pathname))
+      setRoomID(openRoomID(window.location.pathname))
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
@@ -279,6 +297,7 @@ export default function App() {
   const go = (to) => {
     window.history.pushState({}, '', PATHS[to])
     setRoute(to)
+    setRoomID(null)
     // Clicking Play while a game is on screen means "take me back to the
     // menu". Without this the nav looks broken: the path changes and the
     // board stays, with no way back except a reload.
@@ -435,7 +454,7 @@ export default function App() {
         </button>
         <nav className="nav">
           <button
-            className={route === 'play' ? '' : 'on'}
+            className={route === 'play' || route === 'classrooms' ? '' : 'on'}
             onClick={() => go('puzzles')}
           >
             Puzzles
@@ -443,12 +462,36 @@ export default function App() {
           <button className={route === 'play' ? 'on' : ''} onClick={() => go('play')}>
             Play
           </button>
+          <button
+            className={route === 'classrooms' ? 'on' : ''}
+            onClick={() => go('classrooms')}
+          >
+            Classrooms
+          </button>
         </nav>
         <Account refreshKey={ratingKey} />
         <SoundToggle />
       </header>
 
-      {route === 'me' ? (
+      {route === 'classrooms' ? (
+        <>
+          <div className="pagehead">
+            <h1>Classrooms</h1>
+            <p>
+              A coach opens a room and reads out the code. Everyone who joins
+              keeps their own account and their own progress, and the coach can
+              see what the class is finding hard.
+            </p>
+          </div>
+          <Classrooms
+            roomID={roomID}
+            onOpen={(id) => {
+              window.history.pushState({}, '', id ? `/classrooms/${id}` : '/classrooms')
+              setRoomID(id)
+            }}
+          />
+        </>
+      ) : route === 'me' ? (
         <Profile
           onDrill={(list) => {
             window.history.pushState({}, '', `/?drill=${list}`)
