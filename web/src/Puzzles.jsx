@@ -380,7 +380,12 @@ export default function Puzzles({ shared }) {
       setBoard(probe)
       setPhase('failed')
       record(puzzle.id, false, hintsUsed.current)
+      // The wrong move stays up long enough to be read, then the board goes
+      // back to where the puzzle actually stands. Leaving it up looks like the
+      // move was accepted, and it also puts the board a ply ahead of the move
+      // list beside it, which then disagree about what position you are on.
       const truth = new Chess(board.fen())
+      later(() => setBoard(truth), 900)
       setRevealed(true)
       return true
     }
