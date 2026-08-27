@@ -259,6 +259,22 @@ func (c *Classrooms) Join(ctx context.Context, userID, code string) (*Classroom,
 	return &room, nil
 }
 
+// Delete closes a classroom. Coach only, and it is the only way a room ever
+// goes away: the last coach cannot walk out of a room, so without this every
+// classroom ever opened would be permanent. The membership rows go with it
+// through the foreign key rather than by a second statement here.
+func (c *Classrooms) Delete(ctx context.Context, classroomID, userID string) error {
+	role, err := c.roleOf(ctx, classroomID, userID)
+	if err != nil {
+		return err
+	}
+	if role != RoleCoach {
+		return ErrNotCoach
+	}
+	_, err = c.pool.Exec(ctx, `DELETE FROM classrooms WHERE id = $1`, classroomID)
+	return err
+}
+
 // ForUser lists the classrooms the caller belongs to. The join code travels
 // only to coaches: a student who has the code can hand out access to a room
 // that is not theirs to open.

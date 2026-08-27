@@ -149,6 +149,7 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/classrooms/{id}", s.handleClassroomGet)
 	mux.HandleFunc("POST /api/classrooms/{id}/code", s.limit("create", s.limits.CreateGame, s.handleClassroomRotate))
 	mux.HandleFunc("DELETE /api/classrooms/{id}/members/{user}", s.handleClassroomRemove)
+	mux.HandleFunc("DELETE /api/classrooms/{id}", s.handleClassroomDelete)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/me/profile", s.handleProfile)
 	mux.HandleFunc("GET /api/me/games", s.handleHistory)

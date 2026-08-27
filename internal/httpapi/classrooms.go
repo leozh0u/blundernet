@@ -198,6 +198,20 @@ func (s *Server) handleClassroomRotate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"join_code": code})
 }
 
+// handleClassroomDelete closes a room. Coach only, and the only way a room is
+// ever removed, since the last coach is not allowed to simply leave.
+func (s *Server) handleClassroomDelete(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w)(r)
+	if user == nil {
+		return
+	}
+	if err := s.classrooms.Delete(r.Context(), r.PathValue("id"), user.ID); err != nil {
+		classroomError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleClassroomRemove is a coach removing somebody and a student leaving,
 // which are the same row going away and do not need two routes.
 func (s *Server) handleClassroomRemove(w http.ResponseWriter, r *http.Request) {
