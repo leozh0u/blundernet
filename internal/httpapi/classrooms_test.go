@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -198,5 +199,64 @@ func TestLeavingAndRemoving(t *testing.T) {
 	rec = asUser(s, coach, "DELETE", "/api/classrooms/"+room.ID+"/members/"+otherID, "")
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("coach removing a student: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// A hand-typed id must not reach Postgres. Before this was checked it came
+// back as a 500 and logged an error, which is both a worse answer and a way
+// for anybody to fill the log.
+func TestARubbishIdIsNotAServerError(t *testing.T) {
+	s := newPuzzleServer(t)
+	member := signUp(t, s, "rubbish_id")
+	for _, path := range []string{
+		"/api/classrooms/not-a-uuid",
+		"/api/classrooms/..%2f..%2fetc",
+		"/api/classrooms/1",
+	} {
+		if rec := asUser(s, member, "GET", path, ""); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s: %d %s, want 404", path, rec.Code, rec.Body)
+		}
+	}
+}
+
+func TestAClassroomNeedsARealName(t *testing.T) {
+	s := newPuzzleServer(t)
+	coach := signUp(t, s, "name_coach")
+	for _, body := range []string{`{"name":""}`, `{"name":"   "}`, `{"name":"` + strings.Repeat("x", 61) + `"}`} {
+		rec := asUser(s, coach, "POST", "/api/classrooms", body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("creating with %s: %d %s, want 400", body, rec.Code, rec.Body)
+		}
+	}
+}
+
+func TestOnlyACoachClosesTheRoom(t *testing.T) {
+	s := newPuzzleServer(t)
+	coach := signUp(t, s, "close_coach")
+	student := signUp(t, s, "close_student")
+	room := openRoom(t, s, coach, "Team practice")
+	if rec := asUser(s, student, "POST", "/api/classrooms/join", `{"code":"`+room.JoinCode+`"}`); rec.Code != http.StatusOK {
+		t.Fatal(rec.Body)
+	}
+
+	if rec := asUser(s, student, "DELETE", "/api/classrooms/"+room.ID, ""); rec.Code != http.StatusForbidden {
+		t.Errorf("student closing the room: %d %s", rec.Code, rec.Body)
+	}
+	if rec := asUser(s, coach, "DELETE", "/api/classrooms/"+room.ID, ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("coach closing the room: %d %s", rec.Code, rec.Body)
+	}
+	// Gone for the student too, and the membership row went with it.
+	if rec := asUser(s, student, "GET", "/api/classrooms/"+room.ID, ""); rec.Code != http.StatusNotFound {
+		t.Errorf("reading a closed room: %d %s", rec.Code, rec.Body)
+	}
+	rec := asUser(s, student, "GET", "/api/classrooms", "")
+	var list struct {
+		Classrooms []classroomView `json:"classrooms"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Classrooms) != 0 {
+		t.Errorf("student still lists %d rooms after it was closed", len(list.Classrooms))
 	}
 }
