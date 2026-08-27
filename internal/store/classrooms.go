@@ -31,6 +31,8 @@ var (
 	ErrLastCoach   = errors.New("a classroom keeps at least one coach")
 	ErrCodeClashes = errors.New("could not allocate a join code")
 	ErrBadName     = errors.New("a classroom needs a name of 1 to 60 characters")
+	ErrTooManyRuns = errors.New("too many classrooms for one account")
+	ErrRoomFull    = errors.New("that classroom is full")
 )
 
 const (
@@ -44,6 +46,14 @@ const (
 // room. Guessing one is a brute force against a rate limited endpoint rather
 // than a search anybody can run.
 const joinCodeLen = 6
+
+// Caps, so one account cannot fill the table and one leaked code cannot be
+// used to bury a coach's roster. Both are far above any real class and exist
+// to bound the damage rather than to shape the product.
+const (
+	maxRoomsPerCoach = 20
+	maxRoomMembers   = 200
+)
 
 type Classroom struct {
 	ID        string
@@ -115,6 +125,15 @@ func (c *Classrooms) Create(ctx context.Context, userID, name string) (*Classroo
 	}
 	if guest {
 		return nil, ErrGuestUser
+	}
+	var mine int
+	if err := c.pool.QueryRow(ctx,
+		`SELECT count(*) FROM classroom_members WHERE user_id = $1 AND role = 'coach'`,
+		userID).Scan(&mine); err != nil {
+		return nil, err
+	}
+	if mine >= maxRoomsPerCoach {
+		return nil, ErrTooManyRuns
 	}
 
 	// Retried rather than looped forever: a clash at six characters is a one
@@ -201,7 +220,13 @@ func (c *Classrooms) Join(ctx context.Context, userID, code string) (*Classroom,
 		return nil, err
 	}
 
-	tag, err := c.pool.Exec(ctx, `
+	tx, err := c.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `
 		INSERT INTO classroom_members (classroom_id, user_id, role)
 		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, room.ID, userID, RoleStudent)
 	if err != nil {
@@ -213,7 +238,24 @@ func (c *Classrooms) Join(ctx context.Context, userID, code string) (*Classroom,
 	if tag.RowsAffected() == 0 {
 		return nil, ErrAlreadyIn
 	}
+	// Counted after the insert and inside the transaction, so a code passed
+	// around a hundred people cannot have every request pass a "there is room"
+	// check at the same moment. The rollback undoes this join rather than
+	// leaving the room one over.
+	var size int
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM classroom_members WHERE classroom_id = $1`,
+		room.ID).Scan(&size); err != nil {
+		return nil, err
+	}
+	if size > maxRoomMembers {
+		return nil, ErrRoomFull
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
 	room.Role = RoleStudent
+	room.Members = size
 	return &room, nil
 }
 

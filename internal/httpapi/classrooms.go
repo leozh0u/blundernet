@@ -74,6 +74,10 @@ func classroomError(w http.ResponseWriter, err error) {
 		httpError(w, http.StatusConflict, "you are already in that classroom")
 	case errors.Is(err, store.ErrLastCoach):
 		httpError(w, http.StatusConflict, "a classroom keeps at least one coach")
+	case errors.Is(err, store.ErrRoomFull):
+		httpError(w, http.StatusConflict, "that classroom is full")
+	case errors.Is(err, store.ErrTooManyRuns):
+		httpError(w, http.StatusConflict, "you already run the maximum number of classrooms")
 	case errors.Is(err, store.ErrBadName):
 		httpError(w, http.StatusBadRequest, "a classroom name is 1 to 60 characters")
 	default:
