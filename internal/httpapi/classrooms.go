@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/leozh0u/blundernet/internal/store"
 )
 
@@ -76,10 +78,10 @@ func classroomError(w http.ResponseWriter, err error) {
 		httpError(w, http.StatusConflict, "a classroom keeps at least one coach")
 	case errors.Is(err, store.ErrRoomFull):
 		httpError(w, http.StatusConflict, "that classroom is full")
-	case errors.Is(err, store.ErrTooManyRuns):
-		httpError(w, http.StatusConflict, "you already run the maximum number of classrooms")
 	case errors.Is(err, store.ErrBadName):
 		httpError(w, http.StatusBadRequest, "a classroom name is 1 to 60 characters")
+	case errors.Is(err, store.ErrTooManyRuns):
+		httpError(w, http.StatusConflict, "you already run the maximum number of classrooms")
 	default:
 		internalError(w, err)
 	}
@@ -88,23 +90,35 @@ func classroomError(w http.ResponseWriter, err error) {
 // requireAccount is the gate for everything in this file. Unlike the rest of
 // the site, a classroom will not quietly mint a guest to hold your place:
 // membership has to still mean something next week.
-func (s *Server) requireAccount(w http.ResponseWriter) func(*http.Request) *store.User {
-	return func(r *http.Request) *store.User {
-		if s.classrooms == nil {
-			httpError(w, http.StatusServiceUnavailable, "classrooms are not configured")
-			return nil
-		}
-		u := UserFrom(r.Context())
-		if u == nil || u.IsGuest {
-			httpError(w, http.StatusUnauthorized, "sign in to use classrooms")
-			return nil
-		}
-		return u
+func (s *Server) requireAccount(w http.ResponseWriter, r *http.Request) *store.User {
+	if s.classrooms == nil {
+		httpError(w, http.StatusServiceUnavailable, "classrooms are not configured")
+		return nil
 	}
+	u := UserFrom(r.Context())
+	if u == nil || u.IsGuest {
+		httpError(w, http.StatusUnauthorized, "sign in to use classrooms")
+		return nil
+	}
+	return u
+}
+
+// pathUUID reads an id out of the path and refuses anything that is not one.
+// Without this a hand-typed id reaches Postgres, fails to parse there, and
+// comes back as a 500 that also logs an error, so an unauthenticated caller
+// can fill the log by asking for nonsense. It answers the same 404 an id the
+// caller may not see would get, which keeps the two indistinguishable.
+func pathUUID(w http.ResponseWriter, r *http.Request, name string) (string, bool) {
+	v := r.PathValue(name)
+	if _, err := uuid.Parse(v); err != nil {
+		httpError(w, http.StatusNotFound, "no classroom with that code")
+		return "", false
+	}
+	return v, true
 }
 
 func (s *Server) handleClassroomCreate(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
@@ -126,7 +140,7 @@ func (s *Server) handleClassroomCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClassroomList(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
@@ -146,7 +160,7 @@ func (s *Server) handleClassroomList(w http.ResponseWriter, r *http.Request) {
 // is a bearer credential, and guessing one is the obvious attack on this
 // route, exactly as it is for a password or a recovery code.
 func (s *Server) handleClassroomJoin(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
@@ -166,11 +180,15 @@ func (s *Server) handleClassroomJoin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClassroomGet(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
-	room, members, err := s.classrooms.Roster(r.Context(), r.PathValue("id"), user.ID)
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	room, members, err := s.classrooms.Roster(r.Context(), id, user.ID)
 	if err != nil {
 		classroomError(w, err)
 		return
@@ -186,11 +204,15 @@ func (s *Server) handleClassroomGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClassroomRotate(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
-	code, err := s.classrooms.RotateCode(r.Context(), r.PathValue("id"), user.ID)
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	code, err := s.classrooms.RotateCode(r.Context(), id, user.ID)
 	if err != nil {
 		classroomError(w, err)
 		return
@@ -198,29 +220,40 @@ func (s *Server) handleClassroomRotate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"join_code": code})
 }
 
-// handleClassroomDelete closes a room. Coach only, and the only way a room is
-// ever removed, since the last coach is not allowed to simply leave.
-func (s *Server) handleClassroomDelete(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+// handleClassroomRemove is a coach removing somebody and a student leaving,
+// which are the same row going away and do not need two routes.
+func (s *Server) handleClassroomRemove(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
-	if err := s.classrooms.Delete(r.Context(), r.PathValue("id"), user.ID); err != nil {
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	target, ok := pathUUID(w, r, "user")
+	if !ok {
+		return
+	}
+	if err := s.classrooms.Remove(r.Context(), id, user.ID, target); err != nil {
 		classroomError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleClassroomRemove is a coach removing somebody and a student leaving,
-// which are the same row going away and do not need two routes.
-func (s *Server) handleClassroomRemove(w http.ResponseWriter, r *http.Request) {
-	user := s.requireAccount(w)(r)
+// handleClassroomDelete closes a room. Coach only, and the only way a room is
+// ever removed, since the last coach is not allowed to simply leave.
+func (s *Server) handleClassroomDelete(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
 	if user == nil {
 		return
 	}
-	err := s.classrooms.Remove(r.Context(), r.PathValue("id"), user.ID, r.PathValue("user"))
-	if err != nil {
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := s.classrooms.Delete(r.Context(), id, user.ID); err != nil {
 		classroomError(w, err)
 		return
 	}
