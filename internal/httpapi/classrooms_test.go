@@ -62,6 +62,9 @@ func TestCoachOpensARoomAndAStudentJoins(t *testing.T) {
 	if joined.ID != room.ID || joined.Role != "student" {
 		t.Errorf("joined %+v, want the same room as a student", joined)
 	}
+	if joined.JoinCode != "" {
+		t.Errorf("the join response handed a student the code %q", joined.JoinCode)
+	}
 	// The student's own list shows the room without the code, since handing
 	// out access is the coach's to do.
 	rec = asUser(s, student, "GET", "/api/classrooms", "")

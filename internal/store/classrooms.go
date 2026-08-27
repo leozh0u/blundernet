@@ -256,6 +256,10 @@ func (c *Classrooms) Join(ctx context.Context, userID, code string) (*Classroom,
 	}
 	room.Role = RoleStudent
 	room.Members = size
+	// The code came from the caller, so echoing it leaks nothing today. It is
+	// cleared anyway because every other path decides who sees a join code by
+	// role, and one path that decides it differently is how the rule gets lost.
+	room.JoinCode = ""
 	return &room, nil
 }
 
