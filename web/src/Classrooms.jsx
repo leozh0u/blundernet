@@ -166,11 +166,14 @@ export default function Classrooms({ roomID, onOpen }) {
   if (!user || user.guest) {
     return (
       <section className="rooms">
+        {/* The page heading above already says what a classroom is, so this
+            says only the thing the heading cannot: why this is the one part
+            of the site that will not take a guest. */}
         <p className="rooms-note">
-          Classrooms need an account. A coach opens a room and reads out a code;
-          everyone who joins with it keeps their own progress, and the coach can
-          see what the class is finding hard. That only works if the roster is
-          still there next week, which a guest account in this browser is not.
+          This is the one part of the site that needs an account. A guest is
+          held in this browser only, so a roster of them empties itself the
+          first time somebody clears their cookies, and a coach looking at it
+          next week could not tell that from a student who stopped turning up.
         </p>
       </section>
     )
