@@ -26,6 +26,11 @@ const LABELS = {
 // never changes, so the simplest thing that works is the right thing.
 const POLL_MS = 1200
 
+// Polling has to stop on its own. A worker that died leaves the review never
+// finishing, and a page left open on a phone would ask forever. The worker's
+// own budget is twenty seconds, so a minute is past any answer that is coming.
+const GIVE_UP_AFTER = 60_000
+
 export default function Analyse() {
   const [frame, boardWidth] = useBoardWidth()
   const [pgn, setPgn] = useState('')
@@ -39,8 +44,20 @@ export default function Analyse() {
 
   const poll = useCallback((id) => {
     clearInterval(polling.current)
+    const startedAt = Date.now()
     polling.current = setInterval(async () => {
-      const res = await fetch(`/api/review/${id}`, { credentials: 'same-origin' })
+      if (Date.now() - startedAt > GIVE_UP_AFTER) {
+        clearInterval(polling.current)
+        setState('failed')
+        setError('That review is taking too long. Try again in a moment.')
+        return
+      }
+      let res
+      try {
+        res = await fetch(`/api/review/${id}`, { credentials: 'same-origin' })
+      } catch {
+        return // a dropped request is not a failed review; the next tick retries
+      }
       if (res.status === 202) return // still working
       clearInterval(polling.current)
       if (!res.ok) {
@@ -59,12 +76,19 @@ export default function Analyse() {
     setError('')
     setResult(null)
     setState('working')
-    const res = await fetch('/api/review/pgn', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pgn }),
-    })
+    let res
+    try {
+      res = await fetch('/api/review/pgn', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pgn }),
+      })
+    } catch {
+      setState('failed')
+      setError('That could not be sent. Check your connection and try again.')
+      return
+    }
     const body = await res.json().catch(() => ({}))
     if (!res.ok) {
       setState('failed')
