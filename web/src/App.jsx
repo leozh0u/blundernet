@@ -5,6 +5,8 @@ import SearchTree from './SearchTree.jsx'
 import Account from './Account.jsx'
 import Puzzles from './Puzzles.jsx'
 import Classrooms from './Classrooms.jsx'
+import Analyse from './Analyse.jsx'
+import About from './About.jsx'
 import Ranked from './Ranked.jsx'
 import Profile from './Profile.jsx'
 import Streak from './Streak.jsx'
@@ -141,6 +143,8 @@ function sharedGameID(path) {
 
 function routeOf(path) {
   if (path.startsWith('/classroom')) return 'classrooms'
+  if (path.startsWith('/review')) return 'review'
+  if (path.startsWith('/about')) return 'about'
   if (path.startsWith('/puzzles/streak')) return 'streak'
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
   if (path.startsWith('/play')) return 'play'
@@ -164,6 +168,8 @@ function sharedPuzzleID(path) {
 
 const PATHS = {
   classrooms: '/classroom',
+  review: '/review',
+  about: '/about',
   puzzles: '/',
   ranked: '/puzzles/ranked',
   streak: '/puzzles/streak',
@@ -454,13 +460,18 @@ export default function App() {
         </button>
         <nav className="nav">
           <button
-            className={route === 'play' || route === 'classrooms' ? '' : 'on'}
+            className={
+              ['play', 'classrooms', 'review', 'about'].includes(route) ? '' : 'on'
+            }
             onClick={() => go('puzzles')}
           >
             Puzzles
           </button>
           <button className={route === 'play' ? 'on' : ''} onClick={() => go('play')}>
             Play
+          </button>
+          <button className={route === 'review' ? 'on' : ''} onClick={() => go('review')}>
+            Review
           </button>
           <button
             className={route === 'classrooms' ? 'on' : ''}
@@ -473,7 +484,21 @@ export default function App() {
         <SoundToggle />
       </header>
 
-      {route === 'classrooms' ? (
+      {route === 'about' ? (
+        <>
+          <div className="pagehead">
+            <h1>About</h1>
+          </div>
+          <About />
+        </>
+      ) : route === 'review' ? (
+        <>
+          <div className="pagehead">
+            <h1>Review a game</h1>
+          </div>
+          <Analyse />
+        </>
+      ) : route === 'classrooms' ? (
         <>
           <div className="pagehead">
             <h1>Classroom</h1>
@@ -836,6 +861,10 @@ export default function App() {
       {error && <div className="error">{error}</div>}
 
       <footer className="foot">
+        <button className="link quiet" onClick={() => go('about')}>
+          About
+        </button>
+        <span aria-hidden="true"> · </span>
         <Feedback />
         <span aria-hidden="true"> · </span>
         <a href="https://github.com/leozh0u/blundernet">Source</a>

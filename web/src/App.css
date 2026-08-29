@@ -1710,6 +1710,216 @@ button {
   visibility: hidden;
 }
 
+/* ---------- reviewing a pasted game ---------- */
+.analyse {
+  max-width: 56rem;
+}
+
+.analyse-paste {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 40rem;
+  margin-bottom: 1.5rem;
+}
+
+.analyse-paste label {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.analyse-paste textarea {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.analyse-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.analyse-hint {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+/* The two accuracy numbers, which is what a player looks at first. */
+.analyse-scores {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.analyse-scores > div {
+  flex: 1 1 14rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.analyse-side {
+  display: block;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.analyse-scores strong {
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.analyse-counts {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--ink-faint);
+}
+
+.analyse-body {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.analyse-board {
+  width: 100%;
+}
+
+.analyse-said {
+  margin-top: 0.75rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.analyse-moves {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 1px;
+}
+
+.analyse-moves button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.3rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.analyse-moves button:hover {
+  background: var(--surface);
+}
+
+.analyse-moves button.on {
+  background: var(--blue-wash);
+}
+
+.analyse-no {
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.analyse-san {
+  font-family: var(--mono);
+}
+
+.analyse-mark {
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+}
+
+/* Only the moves worth noticing are coloured. Marking every good move would
+   make the list a rainbow and hide the three that matter. */
+.j-blunder .analyse-mark,
+.tag.j-blunder {
+  color: var(--verdict-bad);
+}
+
+.j-mistake .analyse-mark,
+.tag.j-mistake {
+  color: var(--danger);
+}
+
+.j-inaccuracy .analyse-mark,
+.tag.j-inaccuracy {
+  color: #d9b64a;
+}
+
+.j-best .analyse-mark,
+.j-excellent .analyse-mark,
+.j-good .analyse-mark {
+  color: transparent;
+}
+
+.j-best:hover .analyse-mark,
+.j-excellent:hover .analyse-mark,
+.j-good:hover .analyse-mark {
+  color: var(--ink-faint);
+}
+
+/* ---------- about ---------- */
+.about {
+  max-width: 42rem;
+}
+
+.about-lead {
+  font-size: 1.1rem;
+  color: var(--ink);
+  margin-bottom: 1.5rem;
+}
+
+.about h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.about h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.35rem;
+}
+
+.about p {
+  color: var(--ink-soft);
+  margin-bottom: 0.75rem;
+}
+
+.about a {
+  color: var(--blue);
+}
+
+@media (max-width: 46rem) {
+  .analyse-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- homework ---------- */
 .work {
   margin-top: 2rem;
