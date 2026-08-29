@@ -55,6 +55,21 @@ type Stockfish struct {
 	// move game asks sixty times, so this is the number that decides whether a
 	// review takes eight seconds or eighty.
 	moveTime time.Duration
+	// broken is set when a read timed out. The pipe is then mid-answer and
+	// there is no safe way to resynchronise, so every later call fails fast
+	// rather than reading somebody else's reply.
+	broken bool
+}
+
+// SetMoveTime changes the per position budget. Callers that know how many
+// positions they are about to ask about use this to keep the whole job inside
+// a deadline, rather than discovering halfway through that they are over it.
+func (s *Stockfish) SetMoveTime(d time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if d > 0 {
+		s.moveTime = d
+	}
 }
 
 // StockfishOptions are the few UCI options worth setting on a small box.
@@ -162,6 +177,9 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 	if s.closed {
 		return Analysis{}, errors.New("engine is closed")
 	}
+	if s.broken {
+		return Analysis{}, errors.New("engine is out of sync")
+	}
 
 	if err := s.send("position fen " + fen); err != nil {
 		return Analysis{}, err
@@ -170,24 +188,50 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 		return Analysis{}, err
 	}
 
-	var a Analysis
-	for {
-		if err := ctx.Err(); err != nil {
-			return Analysis{}, err
+	// The answer is read on another goroutine so this one can give up.
+	//
+	// Without that, a Stockfish that stops talking blocks the read forever
+	// while holding the lock, and every review after it queues behind a
+	// process that is never going to reply. A hung engine should take out one
+	// job, not the worker.
+	type result struct {
+		a   Analysis
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		var a Analysis
+		for {
+			line, err := s.out.ReadString('\n')
+			if err != nil {
+				done <- result{err: err}
+				return
+			}
+			line = strings.TrimSpace(line)
+			if cp, mate, ok := parseScore(line); ok {
+				a.CP, a.Mate = cp, mate
+			}
+			if best, ok := strings.CutPrefix(line, "bestmove "); ok {
+				a.Best = strings.Fields(best)[0]
+				done <- result{a: a}
+				return
+			}
 		}
-		line, err := s.out.ReadString('\n')
-		if err != nil {
-			return Analysis{}, err
-		}
-		line = strings.TrimSpace(line)
+	}()
 
-		if cp, mate, ok := parseScore(line); ok {
-			a.CP, a.Mate = cp, mate
-		}
-		if best, ok := strings.CutPrefix(line, "bestmove "); ok {
-			a.Best = strings.Fields(best)[0]
-			return a, nil
-		}
+	// Generous against the move time, since this is a stuck engine detector
+	// and not a second time limit: Stockfish is already told how long to
+	// think, so anything beyond this margin means it is not coming back.
+	limit := 10*s.moveTime + 5*time.Second
+	select {
+	case r := <-done:
+		return r.a, r.err
+	case <-ctx.Done():
+		s.broken = true
+		return Analysis{}, ctx.Err()
+	case <-time.After(limit):
+		s.broken = true
+		return Analysis{}, fmt.Errorf("engine did not answer within %s", limit)
 	}
 }
 
