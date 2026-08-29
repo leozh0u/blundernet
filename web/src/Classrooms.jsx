@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { auth } from './auth.js'
 import CoachBoard from './CoachBoard.jsx'
 import ClassQuestion from './ClassQuestion.jsx'
+import Assignments from './Assignments.jsx'
 
 // Classrooms. A coach opens a room and reads out a code; the class joins with
 // it and the coach sees what everyone is getting wrong.
@@ -275,6 +276,8 @@ export default function Classrooms({ roomID, onOpen }) {
         )}
 
         <ClassQuestion classroomID={room.id} role={room.role} refreshKey={askedAt} />
+
+        <Assignments classroomID={room.id} role={room.role} />
 
         {coach && (
           <div className="room-board">
