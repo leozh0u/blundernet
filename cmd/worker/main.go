@@ -92,6 +92,7 @@ func main() {
 		Games:    games,
 		Archive:  archive,
 		Analyser: analyser,
+		Imports:  store.NewImports(archive.Pool()),
 		Jobs:     jobs,
 		Engine:   eng,
 	}

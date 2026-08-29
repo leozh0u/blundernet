@@ -29,6 +29,7 @@ type Worker struct {
 	// played, and those want opposite qualities. Nil disables reviews rather
 	// than failing a worker that is otherwise fine.
 	Analyser review.Analyser
+	Imports  *store.Imports
 }
 
 // Run polls until the context is cancelled.
@@ -134,6 +135,13 @@ func (w *Worker) levelFor(g *game.Game) int {
 }
 
 func (w *Worker) Process(ctx context.Context, j queue.Job) error {
+	// A pasted game is handled before the game lookup, because there is no
+	// game to look up: the id names a row in imports, not a live game in
+	// Redis, and asking Redis for it would report it expired.
+	if j.Kind == queue.KindImport {
+		return w.reviewImport(ctx, j.GameID)
+	}
+
 	g, err := w.Games.Get(ctx, j.GameID)
 	if errors.Is(err, store.ErrNotFound) {
 		obs.JobOutcome(obs.JobExpired)
