@@ -48,6 +48,7 @@ func main() {
 
 	users := store.NewUsers(archive.Pool())
 	go store.RunGuestReaper(ctx, users)
+	go store.RunImportReaper(ctx, store.NewImports(archive.Pool()))
 	puzzles := store.NewPuzzles(archive.Pool())
 
 	srv := &http.Server{

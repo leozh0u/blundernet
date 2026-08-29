@@ -4,11 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// Anonymous pastes accumulate forever otherwise. Anyone can review a game
+// without an account, which is the point of the feature and also means nothing
+// ties those rows to somebody who might come back for them. A review is read
+// in the minutes after it is asked for and then almost never again, so the
+// ones nobody owns are kept a week and the ones attached to an account are
+// kept, because that person can still open their history.
+const (
+	importRetention   = 7 * 24 * time.Hour
+	importReapBatch   = 2000
+	importReapEvery   = time.Hour
+	importReapTimeout = 30 * time.Second
 )
 
 // Games pasted in to be reviewed.
@@ -70,4 +85,45 @@ func (i *Imports) Review(ctx context.Context, id string) (json.RawMessage, bool,
 		return nil, false, nil
 	}
 	return json.RawMessage(raw), true, nil
+}
+
+// Reap deletes one batch of old anonymous reviews. Batched for the same reason
+// the guest reaper is: a backlog must not hold a lock long enough to be felt
+// on the request path.
+func (i *Imports) Reap(ctx context.Context, olderThan time.Duration) (int64, error) {
+	tag, err := i.pool.Exec(ctx, `
+		DELETE FROM imports
+		WHERE id IN (
+		    SELECT id FROM imports
+		    WHERE user_id IS NULL AND created_at < now() - $1::interval
+		    LIMIT $2
+		)`, olderThan, importReapBatch)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// RunImportReaper reaps on a ticker until the context ends, the same shape and
+// for the same reasons as the guest reaper.
+func RunImportReaper(ctx context.Context, imports *Imports) {
+	t := time.NewTicker(importReapEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		reapCtx, cancel := context.WithTimeout(ctx, importReapTimeout)
+		n, err := imports.Reap(reapCtx, importRetention)
+		cancel()
+		if err != nil {
+			slog.Warn("reap imports", "err", err)
+			continue
+		}
+		if n > 0 {
+			slog.Info("reaped old anonymous reviews", "count", n)
+		}
+	}
 }
