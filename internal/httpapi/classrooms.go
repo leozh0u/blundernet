@@ -82,6 +82,12 @@ func classroomError(w http.ResponseWriter, err error) {
 		httpError(w, http.StatusBadRequest, "a classroom name is 1 to 60 characters")
 	case errors.Is(err, store.ErrTooManyRuns):
 		httpError(w, http.StatusConflict, "you already run the maximum number of classrooms")
+	case errors.Is(err, store.ErrNoQuestion):
+		httpError(w, http.StatusNotFound, "no open question")
+	case errors.Is(err, store.ErrQuestionClosed):
+		httpError(w, http.StatusConflict, "that question is closed")
+	case errors.Is(err, store.ErrBadPrompt):
+		httpError(w, http.StatusBadRequest, "a question needs a position and a prompt under 140 characters")
 	default:
 		internalError(w, err)
 	}
@@ -254,6 +260,129 @@ func (s *Server) handleClassroomDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.classrooms.Delete(r.Context(), id, user.ID); err != nil {
+		classroomError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Questions. A coach puts a position in front of the class and asks about it;
+// students answer with a move; the coach reads the answers gathered by move.
+//
+// Both sides poll this rather than holding a socket. A classroom question
+// turns over on the scale of a minute, twenty students is not a fan-out
+// problem, and a socket per student is a connection to lose, reconnect and
+// reason about for no gain at this size.
+
+type questionView struct {
+	ID       string `json:"id"`
+	FEN      string `json:"fen"`
+	Prompt   string `json:"prompt"`
+	Answered int    `json:"answered"`
+	// Only the caller's own move. What the rest of the class played is a
+	// coach's to see.
+	Mine string `json:"mine,omitempty"`
+}
+
+func (s *Server) handleQuestionAsk(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body struct {
+		FEN    string `json:"fen"`
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	q, err := s.classrooms.Ask(r.Context(), id, user.ID, body.FEN, body.Prompt)
+	if err != nil {
+		classroomError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, questionView{ID: q.ID, FEN: q.FEN, Prompt: q.Prompt})
+}
+
+func (s *Server) handleQuestionOpen(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	q, groups, mine, err := s.classrooms.OpenQuestion(r.Context(), id, user.ID)
+	if errors.Is(err, store.ErrNoQuestion) {
+		// Not an error worth a status code: "nothing is being asked" is the
+		// normal state of a classroom and both sides poll for it.
+		writeJSON(w, http.StatusOK, map[string]any{"question": nil})
+		return
+	}
+	if err != nil {
+		classroomError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"question": questionView{ID: q.ID, FEN: q.FEN, Prompt: q.Prompt, Answered: q.Answered, Mine: mine},
+		"answers":  groups,
+	})
+}
+
+func (s *Server) handleQuestionAnswer(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	qid, ok := pathUUID(w, r, "question")
+	if !ok {
+		return
+	}
+	var body struct {
+		UCI string `json:"uci"`
+		SAN string `json:"san"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	// A move is four or five characters. Anything else is not one, and the
+	// board is the only thing that should be producing these.
+	if n := len(body.UCI); n < 4 || n > 5 {
+		httpError(w, http.StatusBadRequest, "that is not a move")
+		return
+	}
+	if err := s.classrooms.Answer(r.Context(), id, qid, user.ID, body.UCI, body.SAN); err != nil {
+		classroomError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleQuestionClose(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	qid, ok := pathUUID(w, r, "question")
+	if !ok {
+		return
+	}
+	if err := s.classrooms.CloseQuestion(r.Context(), id, qid, user.ID); err != nil {
 		classroomError(w, err)
 		return
 	}

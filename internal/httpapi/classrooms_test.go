@@ -8,6 +8,8 @@ import (
 )
 
 // classroom decodes the room out of a create or join response.
+const testHTTPFEN = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+
 func classroom(t *testing.T, body []byte) classroomView {
 	t.Helper()
 	var v classroomView
@@ -261,5 +263,114 @@ func TestOnlyACoachClosesTheRoom(t *testing.T) {
 	}
 	if len(list.Classrooms) != 0 {
 		t.Errorf("student still lists %d rooms after it was closed", len(list.Classrooms))
+	}
+}
+
+func TestAskingAndAnsweringOverHTTP(t *testing.T) {
+	s := newPuzzleServer(t)
+	coach := signUp(t, s, "http_q_coach")
+	alice := signUp(t, s, "http_q_alice")
+	bob := signUp(t, s, "http_q_bob")
+	room := openRoom(t, s, coach, "Team practice")
+	for _, who := range [][]*http.Cookie{alice, bob} {
+		if rec := asUser(s, who, "POST", "/api/classrooms/join", `{"code":"`+room.JoinCode+`"}`); rec.Code != http.StatusOK {
+			t.Fatal(rec.Body)
+		}
+	}
+
+	// Nothing asked yet is a normal state, not an error.
+	rec := asUser(s, alice, "GET", "/api/classrooms/"+room.ID+"/questions/open", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"question":null`) {
+		t.Fatalf("before any question: %d %s", rec.Code, rec.Body)
+	}
+
+	// A student cannot ask.
+	if rec := asUser(s, alice, "POST", "/api/classrooms/"+room.ID+"/questions",
+		`{"fen":"`+testHTTPFEN+`","prompt":"Best move?"}`); rec.Code != http.StatusForbidden {
+		t.Errorf("student asking: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = asUser(s, coach, "POST", "/api/classrooms/"+room.ID+"/questions",
+		`{"fen":"`+testHTTPFEN+`","prompt":"Best move?"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("coach asking: %d %s", rec.Code, rec.Body)
+	}
+	var asked struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &asked); err != nil {
+		t.Fatal(err)
+	}
+
+	answer := `{"uci":"f3g5","san":"Ng5"}`
+	for _, who := range [][]*http.Cookie{alice, bob} {
+		if rec := asUser(s, who, "POST", "/api/classrooms/"+room.ID+"/questions/"+asked.ID+"/answer", answer); rec.Code != http.StatusNoContent {
+			t.Fatalf("answering: %d %s", rec.Code, rec.Body)
+		}
+	}
+
+	// The student sees a count and their own move, and no breakdown.
+	rec = asUser(s, alice, "GET", "/api/classrooms/"+room.ID+"/questions/open", "")
+	var studentSees struct {
+		Question questionView `json:"question"`
+		Answers  []struct {
+			UCI string `json:"uci"`
+		} `json:"answers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &studentSees); err != nil {
+		t.Fatal(err)
+	}
+	if studentSees.Question.Answered != 2 {
+		t.Errorf("student sees %d answers, want the count of 2", studentSees.Question.Answered)
+	}
+	if studentSees.Question.Mine != "f3g5" {
+		t.Errorf("student's own move is %q", studentSees.Question.Mine)
+	}
+	if len(studentSees.Answers) != 0 {
+		t.Errorf("student was handed the class answers: %+v", studentSees.Answers)
+	}
+
+	// The coach sees them gathered.
+	rec = asUser(s, coach, "GET", "/api/classrooms/"+room.ID+"/questions/open", "")
+	var coachSees struct {
+		Answers []struct {
+			UCI   string   `json:"uci"`
+			Count int      `json:"count"`
+			Who   []string `json:"who"`
+		} `json:"answers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &coachSees); err != nil {
+		t.Fatal(err)
+	}
+	if len(coachSees.Answers) != 1 || coachSees.Answers[0].Count != 2 {
+		t.Fatalf("coach sees %+v, want one move played twice", coachSees.Answers)
+	}
+
+	// Closing stops it, and then there is nothing open again.
+	if rec := asUser(s, coach, "POST", "/api/classrooms/"+room.ID+"/questions/"+asked.ID+"/close", ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("closing: %d %s", rec.Code, rec.Body)
+	}
+	rec = asUser(s, alice, "GET", "/api/classrooms/"+room.ID+"/questions/open", "")
+	if !strings.Contains(rec.Body.String(), `"question":null`) {
+		t.Errorf("after closing: %s", rec.Body)
+	}
+}
+
+func TestAnswerHasToBeAMove(t *testing.T) {
+	s := newPuzzleServer(t)
+	coach := signUp(t, s, "http_q_bad")
+	room := openRoom(t, s, coach, "Team practice")
+	rec := asUser(s, coach, "POST", "/api/classrooms/"+room.ID+"/questions",
+		`{"fen":"`+testHTTPFEN+`","prompt":"Best move?"}`)
+	var asked struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &asked); err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{`{"uci":""}`, `{"uci":"nonsense"}`, `{"uci":"e2"}`} {
+		if rec := asUser(s, coach, "POST", "/api/classrooms/"+room.ID+"/questions/"+asked.ID+"/answer", body); rec.Code != http.StatusBadRequest {
+			t.Errorf("answering with %s: %d %s", body, rec.Code, rec.Body)
+		}
 	}
 }
