@@ -796,10 +796,14 @@ export default function App() {
                           <span className="san">
                             {Math.ceil(m.ply / 2)}. {m.san}
                           </span>
+                          {/* What the move cost, in the same unit the review
+                              page uses: the chances it gave away. The old
+                              shape reported centipawns and a material count,
+                              which this stopped producing when the review
+                              moved to Stockfish, so this read undefined and
+                              threw on .toFixed. */}
                           <span className="loss">
-                            {m.material <= -1
-                              ? `${m.material.toFixed(0)} material`
-                              : `-${m.loss.toFixed(2)}`}
+                            {m.judgement}, {Math.round(m.win_before - m.win_after)}%
                           </span>
                         </button>
                       </li>
