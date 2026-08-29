@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Chessboard, ChessboardDnDProvider, SparePiece } from 'react-chessboard'
 import { useBoardWidth } from './board.js'
+import BoardOverlay from './BoardOverlay.jsx'
 
 // A board with the rules switched off, for a coach setting a position up in
 // front of a class.
@@ -92,6 +93,7 @@ export default function CoachBoard() {
   const [loadingOpening, setLoadingOpening] = useState(false)
   const [copied, setCopied] = useState(false)
   const [bad, setBad] = useState(false)
+  const [selected, setSelected] = useState(null)
 
   const current = toFEN(position, turn)
 
@@ -150,6 +152,23 @@ export default function CoachBoard() {
     return true
   }
 
+  // Clicking works as well as dragging, because dragging is the thing a coach
+  // cannot do while talking and pointing at a screen, and on a touchscreen it
+  // is the thing that fights scrolling. Click the piece, click where it goes.
+  // Clicking a piece already selected puts it back down.
+  const clickSquare = (square) => {
+    if (selected === square) {
+      setSelected(null)
+      return
+    }
+    if (selected) {
+      movePiece(selected, square)
+      setSelected(null)
+      return
+    }
+    if (position[square]) setSelected(square)
+  }
+
   const removePiece = (square) => {
     setPosition((p) => {
       const next = { ...p }
@@ -197,7 +216,11 @@ export default function CoachBoard() {
               boardWidth={width}
               position={position}
               boardOrientation={orientation}
-              onPieceDrop={(from, to) => movePiece(from, to)}
+              onPieceDrop={(from, to) => {
+                setSelected(null)
+                return movePiece(from, to)
+              }}
+              onSquareClick={clickSquare}
               onSparePieceDrop={(piece, square) => addPiece(piece, square)}
               onPieceDropOffBoard={(square) => removePiece(square)}
               dropOffBoardAction="trash"
@@ -207,6 +230,12 @@ export default function CoachBoard() {
               customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
             />
             )}
+            {/* The selected square is drawn on the overlay the hints already
+                use, rather than through the board's own square styling, which
+                this board does not pick up. One way of marking a square on the
+                site, and it scales with the board because the overlay is an
+                8 by 8 viewBox. */}
+            <BoardOverlay orientation={orientation} glow={selected} />
           </div>
 
           <div className="tray">
