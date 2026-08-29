@@ -32,9 +32,28 @@ type Worker struct {
 	Imports  *store.Imports
 }
 
+// reviewQueue is how many reviews may be waiting before new ones are left on
+// the queue for later. Small on purpose: the point is to stop reviews blocking
+// moves, not to build a second queue in memory.
+const reviewQueue = 4
+
 // Run polls until the context is cancelled.
+//
+// Moves and hints are handled inline because they take about a quarter of a
+// second. Reviews are handed to one background goroutine instead, because a
+// review is up to twenty seconds of Stockfish and this loop is the only thing
+// answering live games: done inline, one person pasting a long game would
+// freeze every bot game on the site until it finished.
+//
+// One reviewer, not a pool, because there is one Stockfish process behind it
+// and a second goroutine would only queue on its mutex.
 func (w *Worker) Run(ctx context.Context) {
 	slog.Info("worker running", "engine", w.Engine.Name())
+
+	reviews := make(chan queue.Message, reviewQueue)
+	defer close(reviews)
+	go w.runReviews(ctx, reviews)
+
 	for ctx.Err() == nil {
 		msgs, err := w.Jobs.Receive(ctx, 5)
 		if err != nil {
@@ -44,6 +63,16 @@ func (w *Worker) Run(ctx context.Context) {
 			continue
 		}
 		for _, m := range msgs {
+			if m.Job.Kind == queue.KindReview || m.Job.Kind == queue.KindImport {
+				select {
+				case reviews <- m:
+				default:
+					// Full. Not acking leaves it on the queue, which is the
+					// backpressure: it comes back when there is room.
+					slog.Warn("review queue full", "id", m.Job.GameID)
+				}
+				continue
+			}
 			if err := w.Process(ctx, m.Job); err != nil {
 				// Leave the message for redelivery after the
 				// visibility timeout.
@@ -53,6 +82,22 @@ func (w *Worker) Run(ctx context.Context) {
 			if err := w.Jobs.Ack(ctx, m); err != nil {
 				slog.Error("ack", "game", m.Job.GameID, "err", err)
 			}
+		}
+	}
+}
+
+// runReviews is the one place a long analysis is allowed to take its time.
+func (w *Worker) runReviews(ctx context.Context, in <-chan queue.Message) {
+	for m := range in {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := w.Process(ctx, m.Job); err != nil {
+			slog.Error("review", "id", m.Job.GameID, "err", err)
+			continue
+		}
+		if err := w.Jobs.Ack(ctx, m); err != nil {
+			slog.Error("ack review", "id", m.Job.GameID, "err", err)
 		}
 	}
 }
