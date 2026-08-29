@@ -15,6 +15,7 @@ import (
 	"github.com/leozh0u/blundernet/internal/httpapi"
 	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/review"
 	"github.com/leozh0u/blundernet/internal/store"
 )
 
@@ -23,6 +24,11 @@ type Worker struct {
 	Archive *store.Archive
 	Jobs    *queue.Client
 	Engine  engine.Engine
+	// Analyser reviews finished games. Separate from Engine on purpose: the
+	// engine plays you and the analyser tells you the truth about what you
+	// played, and those want opposite qualities. Nil disables reviews rather
+	// than failing a worker that is otherwise fine.
+	Analyser review.Analyser
 }
 
 // Run polls until the context is cancelled.

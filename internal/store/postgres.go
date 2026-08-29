@@ -79,27 +79,13 @@ func nullableUUID(id string) any {
 	return id
 }
 
-// Review is what the network thought of each of a player's moves.
-type Review struct {
-	Moves []ReviewMove `json:"moves"`
-	Worst []ReviewMove `json:"worst"`
-}
-
-type ReviewMove struct {
-	Ply    int     `json:"ply"`
-	UCI    string  `json:"uci"`
-	SAN    string  `json:"san"`
-	Before float64 `json:"before"`
-	After  float64 `json:"after"`
-	Loss   float64 `json:"loss"`
-	// Material change in pawns over the same window, negative when it went.
-	Material float64 `json:"material"`
-	FEN      string  `json:"fen"`
-}
-
 // SaveReview stores a finished game's review. Written once and read many
 // times: the numbers cannot change after the last move.
-func (a *Archive) SaveReview(ctx context.Context, gameID string, r Review) error {
+//
+// The value is whatever the review package produced, stored as JSON rather
+// than spread across columns. It is read whole, never queried into, and its
+// shape belongs to the thing that computes it.
+func (a *Archive) SaveReview(ctx context.Context, gameID string, r any) error {
 	raw, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -112,22 +98,21 @@ func (a *Archive) SaveReview(ctx context.Context, gameID string, r Review) error
 // GetReview returns the stored review, if there is one yet. The second return
 // separates "no review yet" from "no such game", because the first is what a
 // client polling for one is waiting on and the second is a 404.
-func (a *Archive) GetReview(ctx context.Context, gameID string) (Review, bool, error) {
+// The review is handed back as raw JSON rather than decoded and re-encoded.
+// Nothing between the worker and the browser reads a field of it, so parsing
+// it here would only be a chance to lose one.
+func (a *Archive) GetReview(ctx context.Context, gameID string) (json.RawMessage, bool, error) {
 	var raw []byte
 	err := a.pool.QueryRow(ctx,
 		"SELECT review FROM games WHERE id = $1", gameID).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Review{}, false, ErrNotFound
+		return nil, false, ErrNotFound
 	}
 	if err != nil {
-		return Review{}, false, err
+		return nil, false, err
 	}
 	if len(raw) == 0 {
-		return Review{}, false, nil
+		return nil, false, nil
 	}
-	var out Review
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return Review{}, false, err
-	}
-	return out, true, nil
+	return json.RawMessage(raw), true, nil
 }

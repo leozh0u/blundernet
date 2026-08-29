@@ -42,7 +42,13 @@ HEALTHCHECK --interval=15s --timeout=3s CMD wget -qO- http://localhost:8080/heal
 ENTRYPOINT ["api"]
 
 FROM debian:bookworm-slim AS worker
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+# Stockfish reviews finished games. It comes from Debian rather than being
+# built here, and runs as its own process over UCI: nothing in this repo links
+# against it or derives from it, which keeps its GPL where it belongs.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates stockfish \
+  && rm -rf /var/lib/apt/lists/*
+ENV STOCKFISH_PATH=/usr/games/stockfish
 COPY --from=ortlib /ort/lib/libonnxruntime.so* /usr/local/lib/
 ENV ONNXRUNTIME_LIB=/usr/local/lib/libonnxruntime.so
 # Bake the model in for environments without volume mounts (Fargate). If

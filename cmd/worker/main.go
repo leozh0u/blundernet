@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/leozh0u/blundernet/internal/engine"
 	"github.com/leozh0u/blundernet/internal/obs"
 	"github.com/leozh0u/blundernet/internal/queue"
+	"github.com/leozh0u/blundernet/internal/review"
 	"github.com/leozh0u/blundernet/internal/store"
 	"github.com/leozh0u/blundernet/internal/worker"
 )
@@ -62,18 +64,54 @@ func main() {
 	games := store.NewGames(rdb)
 	eng := engine.NewFromEnv()
 
+	// Stockfish reviews finished games. It is optional: a worker with no
+	// Stockfish still plays, still serves hints, and simply cannot review,
+	// which is a better failure than refusing to start.
+	//
+	// The move time is per position and a review asks about every position in
+	// the game, so 120ms is roughly eight seconds for a sixty move game. That
+	// is a queued job on a two core box shared with the site, and the number
+	// to turn up the day reviews get their own machine.
+	var analyser review.Analyser
+	sf, err := engine.NewStockfish(engine.StockfishOptions{
+		Path:     envOr("STOCKFISH_PATH", "stockfish"),
+		MoveTime: envDuration("STOCKFISH_MOVETIME", 120*time.Millisecond),
+	})
+	if err != nil {
+		slog.Warn("no analyser, reviews are disabled", "err", err)
+	} else {
+		defer sf.Close()
+		analyser = sf
+	}
+
 	// Engine timings are measured here but published by the api, so they go
 	// through Redis. HOSTNAME is the task or container id on ECS and compose.
 	go store.PublishEngineReports(ctx, games, envOr("HOSTNAME", "worker"), eng.Name(), 15*time.Second)
 
 	w := &worker.Worker{
-		Games:   games,
-		Archive: archive,
-		Jobs:    jobs,
-		Engine:  eng,
+		Games:    games,
+		Archive:  archive,
+		Analyser: analyser,
+		Jobs:     jobs,
+		Engine:   eng,
 	}
 	w.Run(ctx)
 	slog.Info("worker stopped")
+}
+
+// envDuration reads a millisecond count, because a bare number in an env var
+// is easier to get right than a Go duration string.
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	ms, err := strconv.Atoi(v)
+	if err != nil || ms <= 0 {
+		slog.Warn("ignoring bad duration", "key", key, "value", v)
+		return def
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 func envOr(key, def string) string {
