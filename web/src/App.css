@@ -1436,7 +1436,17 @@ button {
   gap: 0.5rem;
 }
 
-.room-list button {
+.room-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.room-list .room-end {
+  flex: 0 0 auto;
+}
+
+.room-list .room-open {
   width: 100%;
   display: flex;
   align-items: baseline;

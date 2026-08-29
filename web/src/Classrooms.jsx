@@ -157,18 +157,22 @@ export default function Classrooms({ roomID, onOpen }) {
       setDetail(fresh)
     })
 
-  const leave = () =>
+  // Takes the id rather than reading the open room, so the list can end a
+  // session without opening it first. Sessions are kept on purpose, since a
+  // team practising every Tuesday wants the same room and the same roster next
+  // week, but a room started by mistake should not need two clicks to undo.
+  const close = (id) =>
     run(async () => {
-      await api.remove(detail.classroom.id, user.id)
-      setRooms((r) => r.filter((x) => x.id !== detail.classroom.id))
-      onOpen(null)
+      await api.close(id)
+      setRooms((r) => r.filter((x) => x.id !== id))
+      if (detail?.classroom.id === id) onOpen(null)
     })
 
-  const close = () =>
+  const leaveRoom = (id) =>
     run(async () => {
-      await api.close(detail.classroom.id)
-      setRooms((r) => r.filter((x) => x.id !== detail.classroom.id))
-      onOpen(null)
+      await api.remove(id, user.id)
+      setRooms((r) => r.filter((x) => x.id !== id))
+      if (detail?.classroom.id === id) onOpen(null)
     })
 
   const copy = async () => {
@@ -274,11 +278,11 @@ export default function Classrooms({ roomID, onOpen }) {
 
         <div className="room-actions">
           {coach ? (
-            <button className="link quiet" onClick={close}>
+            <button className="link quiet" onClick={() => close(room.id)}>
               Close this session
             </button>
           ) : (
-            <button className="link quiet" onClick={leave}>
+            <button className="link quiet" onClick={() => leaveRoom(room.id)}>
               Leave
             </button>
           )}
@@ -294,12 +298,18 @@ export default function Classrooms({ roomID, onOpen }) {
         <ul className="room-list">
           {rooms.map((r) => (
             <li key={r.id}>
-              <button onClick={() => onOpen(r.id)}>
+              <button className="room-open" onClick={() => onOpen(r.id)}>
                 <span className="room-name">{r.name}</span>
                 <span className="room-meta">
                   {r.role === 'coach' ? 'coach' : 'student'} ·{' '}
                   {r.members === 1 ? '1 member' : `${r.members} members`}
                 </span>
+              </button>
+              <button
+                className="link quiet room-end"
+                onClick={() => (r.role === 'coach' ? close(r.id) : leaveRoom(r.id))}
+              >
+                {r.role === 'coach' ? 'close' : 'leave'}
               </button>
             </li>
           ))}
