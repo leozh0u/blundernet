@@ -7,9 +7,14 @@ import (
 	"time"
 )
 
-// solve records a solved attempt for a puzzle that already exists in the
-// fixtures, at a chosen time, so "only work done after it was set counts" can
-// actually be tested rather than assumed.
+// solve records a solved attempt at a chosen time, so "only work done after it
+// was set counts" can be tested rather than assumed.
+//
+// Callers pass `after` or `before` rather than time.Now(). The assignment's
+// created_at comes from Postgres now() and an attempt stamped from the Go
+// clock can land microseconds either side of it, which made this file fail
+// about one run in five. A minute of daylight in each direction is not a
+// weaker test, it is the same test without a race against two clocks.
 func solve(t *testing.T, c *Classrooms, ctx context.Context, userID, puzzleID string, at time.Time) {
 	t.Helper()
 	_, err := c.pool.Exec(ctx, `
@@ -21,6 +26,10 @@ func solve(t *testing.T, c *Classrooms, ctx context.Context, userID, puzzleID st
 }
 
 // workFixtures puts two puzzles in the corpus with known themes and ratings.
+// Comfortably after, and comfortably before, whatever the two clocks think.
+func after() time.Time  { return time.Now().Add(time.Minute) }
+func before() time.Time { return time.Now().Add(-time.Hour) }
+
 func workFixtures(t *testing.T, c *Classrooms, ctx context.Context) {
 	t.Helper()
 	_, err := c.pool.Exec(ctx, `
@@ -75,7 +84,7 @@ func TestProgressCountsTheRightWork(t *testing.T) {
 	}
 
 	// Solved before the homework was set, so it must not count.
-	solve(t, rooms, ctx, student.ID, "workfork1", time.Now().Add(-time.Hour))
+	solve(t, rooms, ctx, student.ID, "workfork1", before())
 
 	a, err := rooms.SetAssignment(ctx, room.ID, coach.ID, "fork", 0, 0, 2)
 	if err != nil {
@@ -94,15 +103,15 @@ func TestProgressCountsTheRightWork(t *testing.T) {
 	}
 
 	// A pin does not count towards a fork assignment.
-	solve(t, rooms, ctx, student.ID, "workpin1", time.Now())
+	solve(t, rooms, ctx, student.ID, "workpin1", after())
 	list, _ = rooms.Assignments(ctx, room.ID, student.ID)
 	if list[0].Done != 0 {
 		t.Errorf("the wrong theme counted: done is %d, want 0", list[0].Done)
 	}
 
 	// Two forks after it was set, which finishes it.
-	solve(t, rooms, ctx, student.ID, "workfork1", time.Now())
-	solve(t, rooms, ctx, student.ID, "workfork2", time.Now())
+	solve(t, rooms, ctx, student.ID, "workfork1", after())
+	solve(t, rooms, ctx, student.ID, "workfork2", after())
 	list, _ = rooms.Assignments(ctx, room.ID, student.ID)
 	if list[0].Done != 2 {
 		t.Errorf("done is %d, want 2", list[0].Done)
@@ -138,8 +147,8 @@ func TestTheSamePuzzleCountsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	solve(t, rooms, ctx, student.ID, "workfork1", time.Now())
-	solve(t, rooms, ctx, student.ID, "workfork1", time.Now().Add(time.Second))
+	solve(t, rooms, ctx, student.ID, "workfork1", after())
+	solve(t, rooms, ctx, student.ID, "workfork1", after().Add(time.Second))
 	list, err := rooms.Assignments(ctx, room.ID, student.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -167,8 +176,8 @@ func TestRatingWindowNarrowsTheWork(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	solve(t, rooms, ctx, student.ID, "workfork1", time.Now()) // 1300, inside
-	solve(t, rooms, ctx, student.ID, "workfork2", time.Now()) // 1400, outside
+	solve(t, rooms, ctx, student.ID, "workfork1", after()) // 1300, inside
+	solve(t, rooms, ctx, student.ID, "workfork2", after()) // 1400, outside
 	list, err := rooms.Assignments(ctx, room.ID, student.ID)
 	if err != nil {
 		t.Fatal(err)
