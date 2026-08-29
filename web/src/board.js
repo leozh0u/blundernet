@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 // Two things every board on this site needs and the board library gets wrong.
 
@@ -67,26 +67,30 @@ export function useBoardMotion() {
 // board renders as nothing forever; or the observer never fires, which is real
 // in some embedded browsers, with the same result.
 //
-// So this measures the element directly first and treats the observer as the
-// update path rather than the only path. A layout effect, so the measurement
-// lands before the browser paints and the board does not appear at one size
-// and jump to another.
+// So this measures the element directly the moment it attaches, and treats the
+// observer as the update path rather than the only path.
 export function useBoardWidth() {
-  const ref = useRef(null)
   const [width, setWidth] = useState(0)
+  const observer = useRef(null)
 
-  useLayoutEffect(() => {
-    const el = ref.current
+  // A callback ref rather than a ref plus an effect, because the element the
+  // board goes into does not always exist when the component first renders:
+  // the classroom question panel has no board until a question arrives. An
+  // effect with an empty dependency list runs once, sees no element, and never
+  // measures. A callback ref runs when the node attaches, whenever that is.
+  const ref = useCallback((el) => {
+    observer.current?.disconnect()
+    observer.current = null
     if (!el) return
+
     const measure = () => setWidth(Math.floor(el.getBoundingClientRect().width))
     measure()
 
-    // Only for what happens after the first paint: a window resize, the panel
-    // beside it growing, the sidebar collapsing.
+    // Only for what happens after: a window resize, the panel beside it
+    // growing, the sidebar collapsing.
     if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
+    observer.current = new ResizeObserver(measure)
+    observer.current.observe(el)
   }, [])
 
   return [ref, width]
