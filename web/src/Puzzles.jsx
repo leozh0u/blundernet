@@ -4,8 +4,8 @@ import { Chess } from 'chess.js'
 import BoardOverlay from './BoardOverlay.jsx'
 import { sound } from './sound.js'
 import { puzzleLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
-import { useBoardMotion, useBoardWidth } from './board.js'
-import { PositionText, Announce } from './Position.jsx'
+import { useBoardMotion, useBoardWidth, useBlindfold } from './board.js'
+import { PositionText, Announce, BlindfoldButton } from './Position.jsx'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -126,11 +126,7 @@ export default function Puzzles({ shared }) {
   // puzzle, not a setting: the answer to "how hard is this one" is usually
   // wanted about one puzzle in ten.
   const [metaShown, setMetaShown] = useState(false)
-  // Hiding the pieces and playing from memory. A commenter asked for it, and
-  // it is the same board with one class on it: the pieces stay in the DOM and
-  // stay draggable, so everything else keeps working and a screen reader can
-  // still read the position out.
-  const [blindfold, setBlindfold] = useState(false)
+  const blindfold = useBlindfold()
   const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
@@ -692,7 +688,7 @@ export default function Puzzles({ shared }) {
       ) : (
         <div className="puzzle-body">
           <div className="board-wrap">
-            <div className={`frame ${blindfold ? 'blindfold' : ''}`} ref={frame}>
+            <div className={`frame ${blindfold.className}`} ref={frame}>
               {boardWidth > 0 && (
               <Chessboard
                 boardWidth={boardWidth}
@@ -844,13 +840,7 @@ export default function Puzzles({ shared }) {
                 <button className="ghost wide" onClick={next}>
                   Skip
                 </button>
-                <button
-                  className="ghost wide"
-                  onClick={() => setBlindfold((b) => !b)}
-                  aria-pressed={blindfold}
-                >
-                  {blindfold ? 'Show the pieces' : 'Blindfold'}
-                </button>
+                <BlindfoldButton on={blindfold.on} onToggle={blindfold.toggle} />
               </div>
             )}
           </aside>

@@ -3,7 +3,8 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { sound } from './sound.js'
 import { buildLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
-import { useBoardMotion, useBoardWidth } from './board.js'
+import { useBoardMotion, useBoardWidth, useBlindfold } from './board.js'
+import { PositionText, BlindfoldButton } from './Position.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
 
 // Ranked mode. One puzzle at your level, no filters, no hints, no second try,
@@ -29,6 +30,7 @@ export default function Ranked() {
   const [selected, setSelected] = useState(null)
   const [verdict, setVerdict] = useState(null)
   const motion = useBoardMotion()
+  const blindfold = useBlindfold()
   const [frame, boardWidth] = useBoardWidth()
   const [me, setMe] = useState(null)
   const [error, setError] = useState('')
@@ -245,7 +247,7 @@ export default function Ranked() {
   return (
     <div className="puzzle-body">
       <div className="board-wrap">
-        <div className="frame" ref={frame}>
+        <div className={`frame ${blindfold.className}`} ref={frame}>
           {boardWidth > 0 && (
           <Chessboard
             boardWidth={boardWidth}
@@ -261,6 +263,7 @@ export default function Ranked() {
             customSquareStyles={squareStyles}
           />
           )}
+          <PositionText board={board} />
           <BoardOverlay orientation={puzzle?.color || 'white'} badge={verdict} />
         </div>
       </div>
@@ -330,6 +333,11 @@ export default function Ranked() {
             <button className="wide" onClick={next}>
               Next puzzle
             </button>
+          </div>
+        )}
+        {phase === 'solving' && (
+          <div className="during">
+            <BlindfoldButton on={blindfold.on} onToggle={blindfold.toggle} />
           </div>
         )}
         {error && phase !== 'empty' && <p className="form-error">{error}</p>}

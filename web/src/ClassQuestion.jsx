@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import { useBoardWidth } from './board.js'
+import { useBoardWidth, useBlindfold } from './board.js'
+import { PositionText, BlindfoldButton } from './Position.jsx'
 
 // The question a class is currently on.
 //
@@ -18,6 +19,7 @@ const POLL_MS = 4000
 
 export default function ClassQuestion({ classroomID, role, refreshKey }) {
   const [frame, boardWidth] = useBoardWidth()
+  const blindfold = useBlindfold()
   const [question, setQuestion] = useState(null)
   const [answers, setAnswers] = useState([])
   const [board, setBoard] = useState(null)
@@ -131,7 +133,7 @@ export default function ClassQuestion({ classroomID, role, refreshKey }) {
       </div>
 
       <div className="question-body">
-        <div className="question-board" ref={frame}>
+        <div className={`question-board ${blindfold.className}`} ref={frame}>
           {boardWidth > 0 && board && (
             <Chessboard
               id="ClassQuestion"
@@ -161,6 +163,7 @@ export default function ClassQuestion({ classroomID, role, refreshKey }) {
 
         <div className="question-side">
           {error && <p className="rooms-error">{error}</p>}
+          <PositionText board={board} label="Position being asked about" />
 
           {coach ? (
             <>
@@ -201,6 +204,11 @@ export default function ClassQuestion({ classroomID, role, refreshKey }) {
                   ? '1 person has answered'
                   : `${question.answered} people have answered`}
               </p>
+              <BlindfoldButton
+                on={blindfold.on}
+                onToggle={blindfold.toggle}
+                className="ghost"
+              />
             </>
           )}
         </div>

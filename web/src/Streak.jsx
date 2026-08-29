@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { sound } from './sound.js'
-import { useBoardMotion, useBoardWidth } from './board.js'
+import { useBoardMotion, useBoardWidth, useBlindfold } from './board.js'
+import { PositionText, BlindfoldButton } from './Position.jsx'
 import { auth } from './auth.js'
 import GuestNote from './GuestNote.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
@@ -25,6 +26,7 @@ export default function Streak() {
   const [selected, setSelected] = useState(null)
   const [verdict, setVerdict] = useState(null)
   const motion = useBoardMotion()
+  const blindfold = useBlindfold()
   const [frame, boardWidth] = useBoardWidth()
   const [error, setError] = useState('')
   const startedAt = useRef(0)
@@ -219,7 +221,7 @@ export default function Streak() {
   return (
     <div className="puzzle-body">
       <div className="board-wrap">
-        <div className="frame" ref={frame}>
+        <div className={`frame ${blindfold.className}`} ref={frame}>
           {boardWidth > 0 && (
           <Chessboard
             boardWidth={boardWidth}
@@ -235,6 +237,7 @@ export default function Streak() {
             customSquareStyles={squareStyles}
           />
           )}
+          <PositionText board={board} />
           <BoardOverlay orientation={puzzle?.color || 'white'} badge={verdict} />
         </div>
       </div>
@@ -270,6 +273,13 @@ export default function Streak() {
             <button className="wide" onClick={start}>
               Start again
             </button>
+          </div>
+        )}
+        {/* Available while solving, since playing a streak blindfold is the
+            whole point of having it here. */}
+        {phase === 'solving' && (
+          <div className="during">
+            <BlindfoldButton on={blindfold.on} onToggle={blindfold.toggle} />
           </div>
         )}
         {error && <p className="form-error">{error}</p>}
