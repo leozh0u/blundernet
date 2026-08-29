@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { auth } from './auth.js'
 import RecoverySection from './RecoverySection.jsx'
+import Weaknesses from './Weaknesses.jsx'
 
 // The account page. It exists because the site now keeps four numbers about
 // you, and a bare "1500" in the corner of the header says none of them: two

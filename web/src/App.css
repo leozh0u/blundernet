@@ -1885,6 +1885,72 @@ button {
   color: var(--ink-faint);
 }
 
+/* ---------- what to work on ---------- */
+.weak {
+  margin: 2rem 0;
+}
+
+.weak h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.6rem;
+}
+
+.weak-note {
+  color: var(--ink-soft);
+  max-width: 38rem;
+  margin-bottom: 0.5rem;
+}
+
+.weak-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+  max-width: 38rem;
+}
+
+.weak-list li {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) auto auto auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.weak-name {
+  font-weight: 500;
+}
+
+.weak-rate {
+  font-variant-numeric: tabular-nums;
+  color: var(--danger);
+}
+
+.weak-against {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+/* The caveat, deliberately small and deliberately present: the number means
+   something only because of how it was counted. */
+.weak-fine {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  max-width: 38rem;
+}
+
+@media (max-width: 40rem) {
+  .weak-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .weak-against {
+    grid-column: 1 / -1;
+  }
+}
+
 /* ---------- about ---------- */
 .about {
   max-width: 42rem;
