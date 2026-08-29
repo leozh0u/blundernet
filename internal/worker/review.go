@@ -3,10 +3,54 @@ package worker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/leozh0u/blundernet/internal/game"
 	"github.com/leozh0u/blundernet/internal/review"
 )
+
+// budget is how long a whole review may take, and it is set by the queue
+// rather than by taste: the visibility timeout is 30 seconds, so a job that
+// runs longer than that is handed to a second worker while the first is still
+// on it and the game gets analysed twice. Staying well inside it is what makes
+// the job effectively once-only rather than merely idempotent.
+const budget = 20 * time.Second
+
+// The engine still needs enough time per position to say something useful. A
+// game long enough to hit this floor is analysed a little more roughly, which
+// is the right trade against being redelivered.
+const (
+	maxMoveTime = 120 * time.Millisecond
+	minMoveTime = 30 * time.Millisecond
+)
+
+// paced divides the budget across the positions about to be analysed.
+//
+// Without this a 240 ply game at 120ms is 29 seconds, which is inside the
+// timeout only by luck and outside it as soon as the box is busy.
+func paced(positions int) time.Duration {
+	if positions < 1 {
+		return maxMoveTime
+	}
+	each := budget / time.Duration(positions)
+	if each > maxMoveTime {
+		return maxMoveTime
+	}
+	if each < minMoveTime {
+		return minMoveTime
+	}
+	return each
+}
+
+// pacer is implemented by an engine whose per position budget can be changed.
+// Optional, so a review still works against anything that can analyse.
+type pacer interface{ SetMoveTime(time.Duration) }
+
+func (w *Worker) pace(moves int) {
+	if p, ok := w.Analyser.(pacer); ok {
+		p.SetMoveTime(paced(moves + 1)) // one more position than moves
+	}
+}
 
 // Reviewing a finished game.
 //
@@ -26,6 +70,10 @@ func (w *Worker) review(ctx context.Context, g *game.Game) error {
 	if w.Archive == nil {
 		return fmt.Errorf("no archive to store a review in")
 	}
+
+	w.pace(len(g.Moves))
+	ctx, cancel := context.WithTimeout(ctx, budget+10*time.Second)
+	defer cancel()
 
 	out, err := review.Game(ctx, w.Analyser, g.Moves)
 	if err != nil {
@@ -49,6 +97,10 @@ func (w *Worker) reviewImport(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	w.pace(len(moves))
+	ctx, cancel := context.WithTimeout(ctx, budget+10*time.Second)
+	defer cancel()
+
 	out, err := review.Game(ctx, w.Analyser, moves)
 	if err != nil {
 		return err
