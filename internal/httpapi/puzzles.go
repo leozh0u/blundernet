@@ -414,3 +414,24 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleWeaknesses reports what a player is measurably worse at than their own
+// average. Needs an account, because it is a statement about a history and a
+// guest does not have one worth making claims from.
+func (s *Server) handleWeaknesses(w http.ResponseWriter, r *http.Request) {
+	if s.archive == nil {
+		httpError(w, http.StatusServiceUnavailable, "accounts are not configured")
+		return
+	}
+	user := UserFrom(r.Context())
+	if user == nil || user.IsGuest {
+		httpError(w, http.StatusUnauthorized, "sign in to see this")
+		return
+	}
+	out, err := s.archive.Weaknesses(r.Context(), user.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

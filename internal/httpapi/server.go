@@ -166,6 +166,7 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/me/profile", s.handleProfile)
 	mux.HandleFunc("GET /api/me/games", s.handleHistory)
+	mux.HandleFunc("GET /api/me/weaknesses", s.limit("puzzles", s.limits.Puzzles, s.handleWeaknesses))
 	mux.HandleFunc("GET /api/status", s.handleStatusJSON)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.HandleFunc("GET /privacy", s.handlePrivacy)
