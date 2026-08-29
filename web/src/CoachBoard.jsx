@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Chessboard, ChessboardDnDProvider, SparePiece } from 'react-chessboard'
 import { useBoardWidth } from './board.js'
 
@@ -88,10 +88,48 @@ export default function CoachBoard() {
   const [turn, setTurn] = useState('w')
   const [orientation, setOrientation] = useState('white')
   const [fen, setFen] = useState('')
+  const [openings, setOpenings] = useState([])
+  const [loadingOpening, setLoadingOpening] = useState(false)
   const [copied, setCopied] = useState(false)
   const [bad, setBad] = useState(false)
 
   const current = toFEN(position, turn)
+
+  useEffect(() => {
+    fetch('/api/puzzles/openings')
+      .then((r) => (r.ok ? r.json() : { openings: [] }))
+      .then((body) => setOpenings(body.openings || []))
+      .catch(() => {})
+  }, [])
+
+  // Pulling a real position out of the corpus rather than shipping an opening
+  // book. The puzzles are tagged with the opening they came from, so asking
+  // for one is asking the search that already exists a narrower question, and
+  // what a coach gets is a position somebody actually reached rather than a
+  // textbook line ending on move six.
+  const loadOpening = async (name) => {
+    if (!name) return
+    setLoadingOpening(true)
+    setBad(false)
+    try {
+      const res = await fetch(`/api/puzzles?opening=${encodeURIComponent(name)}&limit=1`)
+      const body = await res.json()
+      const puzzle = body.puzzles?.[0]
+      if (!puzzle) {
+        setBad(true)
+        return
+      }
+      const parsed = fromFEN(puzzle.fen)
+      if (parsed) {
+        setPosition(parsed.position)
+        setTurn(parsed.turn)
+      }
+    } catch {
+      setBad(true)
+    } finally {
+      setLoadingOpening(false)
+    }
+  }
 
   // Every drop returns true, because there is nothing here that can be
   // refused. A piece landing on an occupied square replaces what was there,
@@ -182,8 +220,8 @@ export default function CoachBoard() {
         <aside className="coachboard-side">
           <h3>Set up a position</h3>
           <p className="coachboard-help">
-            Drag pieces anywhere, legal or not. Drag one off the board to take
-            it off. The trays hold as many spares as you want.
+            Drag anything anywhere. Off the board removes it. The trays never
+            run out.
           </p>
 
           <div className="coachboard-actions">
@@ -220,7 +258,7 @@ export default function CoachBoard() {
           </div>
 
           <label className="coachboard-fen-label" htmlFor="coach-fen">
-            FEN
+            Position code <span className="coachboard-aka">FEN</span>
           </label>
           <output className="coachboard-fen" id="coach-fen">
             {current}
@@ -236,14 +274,32 @@ export default function CoachBoard() {
                 setFen(e.target.value)
                 setBad(false)
               }}
-              placeholder="Paste a FEN"
-              aria-label="Paste a FEN"
+              placeholder="Paste a position code"
+              aria-label="Paste a position code"
             />
             <button className="ghost" onClick={load} disabled={!fen.trim()}>
               Load
             </button>
           </div>
           {bad && <p className="coachboard-bad">That is not a position I can read.</p>}
+
+          <label className="coachboard-fen-label opening-label" htmlFor="coach-opening">
+            Start from an opening
+          </label>
+          <select
+            id="coach-opening"
+            className="coachboard-opening"
+            defaultValue=""
+            disabled={loadingOpening}
+            onChange={(e) => loadOpening(e.target.value)}
+          >
+            <option value="">Pick one</option>
+            {openings.map((o) => (
+              <option key={o.name} value={o.name}>
+                {o.name.replace(/_/g, ' ')}
+              </option>
+            ))}
+          </select>
         </aside>
       </div>
     </ChessboardDnDProvider>

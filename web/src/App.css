@@ -1620,6 +1620,31 @@ button {
   font-size: 0.8rem;
 }
 
+/* The real name of the thing, kept small beside the plain one. A coach who
+   has never heard of FEN does not need to, and one who has should not have to
+   guess that "position code" is the same thing. */
+.coachboard-aka {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  text-transform: none;
+}
+
+.opening-label {
+  margin-top: 1rem;
+}
+
+.coachboard-opening {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
 .coachboard-bad {
   margin-top: 0.5rem;
   color: var(--danger);

@@ -36,7 +36,24 @@ const api = {
 // The code is stored and compared without the dash. It is shown with one
 // because six characters read off a screen in one run is where people drop a
 // character.
-const pretty = (code) => (code ? `${code.slice(0, 3)}-${code.slice(3)}` : '')
+//
+// The dash is its own element so it can be excluded from a selection. People
+// copy a short code by dragging across it rather than hunting for a copy
+// button, and a dash that comes along for the ride turns a working code into
+// one the server has to be forgiving about. It is forgiving, but the paste
+// should be right in the first place.
+function Code({ code }) {
+  if (!code) return null
+  return (
+    <>
+      {code.slice(0, 3)}
+      <span className="code-sep" aria-hidden="true">
+        -
+      </span>
+      {code.slice(3)}
+    </>
+  )
+}
 
 // Same forgiveness the server applies, done in the field so the person typing
 // sees their input tidied rather than silently corrected on submit.
@@ -155,7 +172,7 @@ export default function Classrooms({ roomID, onOpen }) {
     })
 
   const copy = async () => {
-    await navigator.clipboard.writeText(pretty(detail.classroom.join_code))
+    await navigator.clipboard.writeText(detail.classroom.join_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -195,7 +212,9 @@ export default function Classrooms({ roomID, onOpen }) {
           <div className="room-code">
             <div>
               <span className="room-code-label">Join code</span>
-              <strong>{pretty(room.join_code)}</strong>
+              <strong>
+                <Code code={room.join_code} />
+              </strong>
             </div>
             <div className="room-code-actions">
               <button className="link" onClick={copy}>
