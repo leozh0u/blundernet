@@ -1667,6 +1667,28 @@ button {
   }
 }
 
+/* Out of sight, still in the accessibility tree. The standard clip pattern
+   rather than display:none, which would take it out of the tree as well, or
+   visibility:hidden, which does the same. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Blindfold. The pieces keep their place in the layout and in the
+   accessibility tree, so the board stays playable and stays readable; they
+   are only not drawn. */
+.frame.blindfold [data-piece] {
+  visibility: hidden;
+}
+
 /* ---------- the question a class is on ---------- */
 .question {
   margin-top: 2rem;
