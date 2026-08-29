@@ -95,3 +95,16 @@ export function useBoardWidth() {
 
   return [ref, width]
 }
+
+// useBlindfold is the pieces being hidden while everything else keeps working.
+//
+// Shared rather than repeated, because it exists in four modes and a rule
+// pasted four times gets fixed in one of them. The state is a boolean; what
+// makes it work is that the class hides the pieces with visibility rather than
+// removing them, so they keep their squares, stay draggable, and stay in the
+// accessibility tree for anyone reading the board as text.
+export function useBlindfold() {
+  const [on, setOn] = useState(false)
+  const toggle = useCallback(() => setOn((v) => !v), [])
+  return { on, toggle, className: on ? 'blindfold' : '' }
+}

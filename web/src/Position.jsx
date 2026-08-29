@@ -73,3 +73,14 @@ export function Announce({ children }) {
     </div>
   )
 }
+
+// BlindfoldButton says what it will do, not what is on, which is the rule for
+// a toggle whose effect is not visible in the control itself. aria-pressed
+// carries the state for anyone who cannot see the board change.
+export function BlindfoldButton({ on, onToggle, className = 'ghost wide' }) {
+  return (
+    <button type="button" className={className} onClick={onToggle} aria-pressed={on}>
+      {on ? 'Show the pieces' : 'Blindfold'}
+    </button>
+  )
+}

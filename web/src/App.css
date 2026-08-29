@@ -1705,8 +1705,11 @@ button {
 
 /* Blindfold. The pieces keep their place in the layout and in the
    accessibility tree, so the board stays playable and stays readable; they
-   are only not drawn. */
-.frame.blindfold [data-piece] {
+   are only not drawn.
+   
+   Not scoped to .frame: four modes carry this class on four different
+   wrappers, and scoping it to one of them is why it only worked in one. */
+.blindfold [data-piece] {
   visibility: hidden;
 }
 
