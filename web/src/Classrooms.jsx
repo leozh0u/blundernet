@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { auth } from './auth.js'
 import CoachBoard from './CoachBoard.jsx'
+import ClassQuestion from './ClassQuestion.jsx'
 
 // Classrooms. A coach opens a room and reads out a code; the class joins with
 // it and the coach sees what everyone is getting wrong.
@@ -78,6 +79,9 @@ export default function Classrooms({ roomID, onOpen }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  // Bumped when the coach asks something, so the question panel picks it up
+  // without waiting for its next poll.
+  const [askedAt, setAskedAt] = useState(0)
 
   const load = useCallback(async () => {
     const me = await auth.me()
@@ -270,9 +274,16 @@ export default function Classrooms({ roomID, onOpen }) {
           <p className="rooms-note">Your coach can see your puzzle work. Nobody else can.</p>
         )}
 
+        <ClassQuestion classroomID={room.id} role={room.role} refreshKey={askedAt} />
+
         {coach && (
           <div className="room-board">
-            <CoachBoard />
+            <CoachBoard
+              onAsk={async (fen, prompt) => {
+                await api.call('POST', `/api/classrooms/${room.id}/questions`, { fen, prompt })
+                setAskedAt((n) => n + 1)
+              }}
+            />
           </div>
         )}
 

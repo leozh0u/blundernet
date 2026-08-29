@@ -1667,6 +1667,119 @@ button {
   }
 }
 
+/* ---------- the question a class is on ---------- */
+.question {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.question-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.question-head h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.question-turn {
+  color: var(--ink-faint);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.question-body {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.question-board {
+  width: 100%;
+}
+
+/* The answers, heaviest first. The move is what a coach reads, the tally is
+   what they read second, and the names come last because "four people played
+   this" is the lesson and "which four" is the follow-up. */
+.question-answers {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.question-answers li {
+  display: grid;
+  grid-template-columns: 4.5rem 2rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.question-move {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.question-tally {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.question-who {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.question-count {
+  margin-bottom: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.question-mine {
+  margin-bottom: 0.5rem;
+  color: var(--ink-soft);
+}
+
+.question-mine strong {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+.coachboard-ask {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.coachboard-ask input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 46rem) {
+  .question-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Account page. Three cards for the three things the site keeps about you,
    each with the sentence that says what moves the numbers. */
 .profile .note {

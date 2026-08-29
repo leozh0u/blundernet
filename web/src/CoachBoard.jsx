@@ -83,7 +83,7 @@ function fromFEN(fen) {
   return { position, turn: fields[1] === 'b' ? 'b' : 'w' }
 }
 
-export default function CoachBoard() {
+export default function CoachBoard({ onAsk }) {
   const [frame, width] = useBoardWidth()
   const [position, setPosition] = useState(START)
   const [turn, setTurn] = useState('w')
@@ -94,6 +94,8 @@ export default function CoachBoard() {
   const [copied, setCopied] = useState(false)
   const [bad, setBad] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [prompt, setPrompt] = useState('')
+  const [asking, setAsking] = useState(false)
 
   const current = toFEN(position, turn)
 
@@ -252,6 +254,34 @@ export default function CoachBoard() {
             Drag anything anywhere. Off the board removes it. The trays never
             run out.
           </p>
+
+          {/* Putting the position in front of the class is the point of
+              setting it up, so it sits at the top of the panel rather than
+              under the position code. */}
+          {onAsk && (
+            <form
+              className="coachboard-ask"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                setAsking(true)
+                try {
+                  await onAsk(current, prompt)
+                  setPrompt('')
+                } finally {
+                  setAsking(false)
+                }
+              }}
+            >
+              <input
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="What is the best move?"
+                maxLength={140}
+                aria-label="What to ask the class"
+              />
+              <button disabled={asking}>Ask the class</button>
+            </form>
+          )}
 
           <div className="coachboard-actions">
             <button className="ghost" onClick={() => setPosition(START)}>
