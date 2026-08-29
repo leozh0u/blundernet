@@ -21,7 +21,8 @@ type Job struct {
 	GameID string `json:"game_id"`
 	Ply    int    `json:"ply"`
 	// Kind is empty or "move" for the engine's own reply, "hint" when the
-	// player asked what they should play, and "review" to score a finished
+	// player asked what they should play, "import" to review a pasted game,
+	// and "review" to score a finished
 	// game. None of the other kinds touch game state, so one queue and one
 	// worker fleet serve all of them and a stray delivery cannot corrupt a
 	// position.
@@ -32,6 +33,10 @@ const (
 	KindMove   = "move"
 	KindHint   = "hint"
 	KindReview = "review"
+	// A game pasted in rather than played here. GameID carries the import id,
+	// since the queue only ever needs one identifier and inventing a second
+	// field would mean every consumer checking which one to read.
+	KindImport = "import"
 )
 
 type Message struct {
