@@ -140,7 +140,7 @@ function sharedGameID(path) {
 }
 
 function routeOf(path) {
-  if (path.startsWith('/classrooms')) return 'classrooms'
+  if (path.startsWith('/classroom')) return 'classrooms'
   if (path.startsWith('/puzzles/streak')) return 'streak'
   if (path.startsWith('/puzzles/ranked')) return 'ranked'
   if (path.startsWith('/play')) return 'play'
@@ -148,10 +148,10 @@ function routeOf(path) {
   return 'puzzles'
 }
 
-// /classrooms/<uuid> opens one room. Same idea as a shared puzzle: the URL is
+// /classroom/<uuid> opens one room. Same idea as a shared puzzle: the URL is
 // the state, so a coach can bookmark the class they look at every week.
 function openRoomID(path) {
-  const m = path.match(/^\/classrooms\/([-a-f0-9]{8,})$/)
+  const m = path.match(/^\/classroom\/([-a-f0-9]{8,})$/)
   return m ? m[1] : null
 }
 
@@ -163,7 +163,7 @@ function sharedPuzzleID(path) {
 }
 
 const PATHS = {
-  classrooms: '/classrooms',
+  classrooms: '/classroom',
   puzzles: '/',
   ranked: '/puzzles/ranked',
   streak: '/puzzles/streak',
@@ -466,7 +466,7 @@ export default function App() {
             className={route === 'classrooms' ? 'on' : ''}
             onClick={() => go('classrooms')}
           >
-            Classrooms
+            Classroom
           </button>
         </nav>
         <Account refreshKey={ratingKey} />
@@ -476,17 +476,13 @@ export default function App() {
       {route === 'classrooms' ? (
         <>
           <div className="pagehead">
-            <h1>Classrooms</h1>
-            <p>
-              A coach opens a room and reads out the code. Everyone who joins
-              keeps their own account and their own progress, and the coach can
-              see what the class is finding hard.
-            </p>
+            <h1>Classroom</h1>
+            <p>Share a code with your team and see what they are getting wrong.</p>
           </div>
           <Classrooms
             roomID={roomID}
             onOpen={(id) => {
-              window.history.pushState({}, '', id ? `/classrooms/${id}` : '/classrooms')
+              window.history.pushState({}, '', id ? `/classroom/${id}` : '/classroom')
               setRoomID(id)
             }}
           />

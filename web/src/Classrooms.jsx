@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { auth } from './auth.js'
+import CoachBoard from './CoachBoard.jsx'
 
 // Classrooms. A coach opens a room and reads out a code; the class joins with
 // it and the coach sees what everyone is getting wrong.
@@ -166,14 +167,11 @@ export default function Classrooms({ roomID, onOpen }) {
   if (!user || user.guest) {
     return (
       <section className="rooms">
-        {/* The page heading above already says what a classroom is, so this
-            says only the thing the heading cannot: why this is the one part
-            of the site that will not take a guest. */}
+        {/* The heading above already says what this is for, so this says
+            only the thing it cannot: why this one page refuses a guest. */}
         <p className="rooms-note">
-          This is the one part of the site that needs an account. A guest is
-          held in this browser only, so a roster of them empties itself the
-          first time somebody clears their cookies, and a coach looking at it
-          next week could not tell that from a student who stopped turning up.
+          Needs an account. Guest progress lives in this browser only, so a
+          roster of guests would be empty by next week.
         </p>
       </section>
     )
@@ -185,11 +183,11 @@ export default function Classrooms({ roomID, onOpen }) {
     return (
       <section className="rooms">
         <button className="link quiet back" onClick={() => onOpen(null)}>
-          &lt; All classrooms
+          &lt; Back
         </button>
         <div className="room-head">
           <h2>{room.name}</h2>
-          <span className="room-role">{coach ? 'You are the coach' : 'Student'}</span>
+          <span className="room-role">{coach ? 'Coach' : 'Student'}</span>
         </div>
         {error && <p className="rooms-error">{error}</p>}
 
@@ -246,20 +244,23 @@ export default function Classrooms({ roomID, onOpen }) {
           </tbody>
         </table>
         {!coach && (
-          <p className="rooms-note">
-            Your coach can see your puzzle work in this class. Nobody else in it
-            can, and neither can anyone outside it.
-          </p>
+          <p className="rooms-note">Your coach can see your puzzle work. Nobody else can.</p>
+        )}
+
+        {coach && (
+          <div className="room-board">
+            <CoachBoard />
+          </div>
         )}
 
         <div className="room-actions">
           {coach ? (
             <button className="link quiet" onClick={close}>
-              Close this classroom
+              Close this session
             </button>
           ) : (
             <button className="link quiet" onClick={leave}>
-              Leave this classroom
+              Leave
             </button>
           )}
         </div>
@@ -288,7 +289,7 @@ export default function Classrooms({ roomID, onOpen }) {
 
       <div className="room-forms">
         <form onSubmit={join}>
-          <label htmlFor="room-code">Join a classroom</label>
+          <label htmlFor="room-code">Join with a code</label>
           <div className="row">
             <input
               id="room-code"
@@ -302,7 +303,7 @@ export default function Classrooms({ roomID, onOpen }) {
         </form>
 
         <form onSubmit={create}>
-          <label htmlFor="room-name">Or start one, if you are coaching</label>
+          <label htmlFor="room-name">Start a session</label>
           <div className="row">
             <input
               id="room-name"
