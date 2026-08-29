@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { sound } from './sound.js'
+import { useBoardMotion, useBoardWidth } from './board.js'
 import { auth } from './auth.js'
 import GuestNote from './GuestNote.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
@@ -23,6 +24,8 @@ export default function Streak() {
   const [guest, setGuest] = useState(false)
   const [selected, setSelected] = useState(null)
   const [verdict, setVerdict] = useState(null)
+  const motion = useBoardMotion()
+  const [frame, boardWidth] = useBoardWidth()
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
@@ -51,6 +54,10 @@ export default function Streak() {
       setCount(p.count)
       setBest(p.best)
       setPhase('setup')
+      setVerdict(null)
+      // A different puzzle. Nothing on the old board relates to the new one,
+      // so it appears rather than sliding into place.
+      motion.jump(0)
       setBoard(new Chess(p.fen))
       later(() => {
         const after = new Chess(p.fen)
@@ -59,12 +66,14 @@ export default function Streak() {
           to: p.setup_move.slice(2, 4),
           promotion: p.setup_move[4] || undefined,
         })
+        // The blunder that sets the puzzle up is a move, and looks like one.
+        motion.move()
         setBoard(after)
         setPhase('solving')
         startedAt.current = Date.now()
       }, 600)
     },
-    [later],
+    [later, motion.jump, motion.move],
   )
 
   const start = useCallback(async () => {
@@ -88,7 +97,11 @@ export default function Streak() {
       return
     }
     const body = await res.json()
+    // This used to be set and never cleared, anywhere in the file, so the
+    // mark stayed on the board for the rest of the run and ended up pinned to
+    // a square belonging to a puzzle two positions ago.
     setVerdict({ square: uci.slice(2, 4), good: body.correct })
+    later(() => setVerdict(null), 900)
     setCount(body.count)
 
     if (body.correct && !body.done) {
@@ -99,6 +112,7 @@ export default function Streak() {
           to: body.reply.slice(2, 4),
           promotion: body.reply[4] || undefined,
         })
+        motion.move()
         setBoard(answered)
       }, 350)
       return
@@ -127,7 +141,10 @@ export default function Streak() {
         }
         running = snapshot
         const shown = new Chess(snapshot.fen())
-        later(() => setBoard(shown), delay)
+        later(() => {
+          motion.move()
+          setBoard(shown)
+        }, delay)
         delay += 550
       }
     }
@@ -202,9 +219,12 @@ export default function Streak() {
   return (
     <div className="puzzle-body">
       <div className="board-wrap">
-        <div className="frame">
+        <div className="frame" ref={frame}>
+          {boardWidth > 0 && (
           <Chessboard
+            boardWidth={boardWidth}
             position={board ? board.fen() : 'start'}
+            animationDuration={motion.ms}
             onPieceDrop={(f, t) => tryMove(f, t)}
             onSquareClick={onSquareClick}
             boardOrientation={puzzle?.color || 'white'}
@@ -214,6 +234,7 @@ export default function Streak() {
             customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
             customSquareStyles={squareStyles}
           />
+          )}
           <BoardOverlay orientation={puzzle?.color || 'white'} badge={verdict} />
         </div>
       </div>

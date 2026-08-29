@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Chessboard, ChessboardDnDProvider, SparePiece } from 'react-chessboard'
+import { useBoardWidth } from './board.js'
 
 // A board with the rules switched off, for a coach setting a position up in
 // front of a class.
@@ -82,23 +83,7 @@ function fromFEN(fen) {
 }
 
 export default function CoachBoard() {
-  // The board is given an explicit width rather than left to size itself.
-  // react-chessboard measures its container inside an effect keyed on a ref,
-  // and a ref does not trigger a rerender, so if it reads a width of zero on
-  // the first pass it never measures again and renders nothing at all. A
-  // ResizeObserver here does re-fire, and it also gives the spare pieces a
-  // size that matches the squares they are dragged onto.
-  const frame = useRef(null)
-  const [width, setWidth] = useState(0)
-  useEffect(() => {
-    if (!frame.current) return
-    const observer = new ResizeObserver(([entry]) => {
-      setWidth(Math.floor(entry.contentRect.width))
-    })
-    observer.observe(frame.current)
-    return () => observer.disconnect()
-  }, [])
-
+  const [frame, width] = useBoardWidth()
   const [position, setPosition] = useState(START)
   const [turn, setTurn] = useState('w')
   const [orientation, setOrientation] = useState('white')

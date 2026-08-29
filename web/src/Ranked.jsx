@@ -3,6 +3,7 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { sound } from './sound.js'
 import { buildLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
+import { useBoardMotion, useBoardWidth } from './board.js'
 import BoardOverlay from './BoardOverlay.jsx'
 
 // Ranked mode. One puzzle at your level, no filters, no hints, no second try,
@@ -27,6 +28,8 @@ export default function Ranked() {
   const nav = useAnswerLine(answer)
   const [selected, setSelected] = useState(null)
   const [verdict, setVerdict] = useState(null)
+  const motion = useBoardMotion()
+  const [frame, boardWidth] = useBoardWidth()
   const [me, setMe] = useState(null)
   const [error, setError] = useState('')
   const startedAt = useRef(0)
@@ -53,6 +56,7 @@ export default function Ranked() {
       setResult(null)
       setSelected(null)
       setVerdict(null)
+      motion.jump()
       setPhase('setup')
       setBoard(new Chess(p.fen))
       later(() => {
@@ -115,7 +119,12 @@ export default function Ranked() {
       return
     }
     const body = await res.json()
+    // Cleared on a timer rather than by whatever happens next. It used to come
+    // down only when the following puzzle loaded, so the mark sat on the board
+    // through the whole answer walk, pinned to a square the position had
+    // already moved past.
     setVerdict({ square: uci.slice(2, 4), good: body.correct })
+    later(() => setVerdict(null), 900)
     if (body.done) sound[body.correct ? 'solve' : 'fail']()
     else if (body.correct) sound.move()
 
@@ -128,6 +137,7 @@ export default function Ranked() {
           to: body.reply.slice(2, 4),
           promotion: body.reply[4] || undefined,
         })
+        motion.move()
         setBoard(answered)
       }, 350)
       return
@@ -140,6 +150,7 @@ export default function Ranked() {
       // Rewind to before the mistake and hand back the real line to walk.
       const from = stepOf(positionBefore, puzzle)
       const line = buildLine(positionBefore, body.solution, from)
+      motion.jump()
       setBoard(positionBefore)
       setAnswer(line)
     }
@@ -148,8 +159,10 @@ export default function Ranked() {
   // The board follows the cursor whenever there is an answer to walk, so every
   // way of moving through it lands in one place.
   useEffect(() => {
-    if (nav.fen) setBoard(new Chess(nav.fen))
-  }, [nav.fen])
+    if (!nav.fen) return
+    motion.step(nav.cursor)
+    setBoard(new Chess(nav.fen))
+  }, [nav.fen, nav.cursor, motion.step])
 
   // How many plies of the solution had been played when the attempt ended.
   // The board history holds the setup move plus everything since.
@@ -232,9 +245,12 @@ export default function Ranked() {
   return (
     <div className="puzzle-body">
       <div className="board-wrap">
-        <div className="frame">
+        <div className="frame" ref={frame}>
+          {boardWidth > 0 && (
           <Chessboard
+            boardWidth={boardWidth}
             position={board ? board.fen() : 'start'}
+            animationDuration={motion.ms}
             onPieceDrop={(f, t) => tryMove(f, t)}
             onSquareClick={onSquareClick}
             boardOrientation={puzzle?.color || 'white'}
@@ -244,6 +260,7 @@ export default function Ranked() {
             customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
             customSquareStyles={squareStyles}
           />
+          )}
           <BoardOverlay orientation={puzzle?.color || 'white'} badge={verdict} />
         </div>
       </div>

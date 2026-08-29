@@ -404,6 +404,7 @@ button {
    size into and a positioning context for the result overlay. */
 .frame {
   position: relative;
+  width: 100%;
   max-width: 36rem;
   margin: 0 auto;
 }
@@ -1374,6 +1375,14 @@ button {
   font-family: var(--mono);
   font-size: 1.6rem;
   letter-spacing: 0.08em;
+}
+
+/* Drag-selecting the code has to yield the code. The separator is there to
+   break six characters into two readable halves and is not part of it. */
+.code-sep {
+  user-select: none;
+  -webkit-user-select: none;
+  color: var(--ink-faint);
 }
 
 .room-code-actions {

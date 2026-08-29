@@ -4,6 +4,7 @@ import { Chess } from 'chess.js'
 import BoardOverlay from './BoardOverlay.jsx'
 import { sound } from './sound.js'
 import { puzzleLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
+import { useBoardMotion, useBoardWidth } from './board.js'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -94,9 +95,6 @@ const uciOf = (mv) => mv.from + mv.to + (mv.promotion || '')
 
 const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }
 
-// How long one move takes to slide, matching react-chessboard's own default.
-const MOVE_MS = 300
-
 // What stands in for a fact the puzzle is not telling you yet.
 const HIDDEN = '···'
 
@@ -134,10 +132,8 @@ export default function Puzzles({ shared }) {
     () => new URLSearchParams(window.location.search).get('drill') || 'search',
   )
   const [error, setError] = useState('')
-  // How long the board takes to show the position it was just handed, and
-  // which position it was on last, so a step can be told from a jump.
-  const [animateMs, setAnimateMs] = useState(MOVE_MS)
-  const lastCursor = useRef(0)
+  const motion = useBoardMotion()
+  const [frame, boardWidth] = useBoardWidth()
   const startedAt = useRef(0)
   const timers = useRef([])
 
@@ -166,10 +162,9 @@ export default function Puzzles({ shared }) {
   // at once, which is what "play the answer" from the end used to do.
   useEffect(() => {
     if (!nav.fen) return
-    setAnimateMs(nav.cursor === lastCursor.current + 1 ? MOVE_MS : 0)
-    lastCursor.current = nav.cursor
+    motion.step(nav.cursor)
     setBoard(new Chess(nav.fen))
-  }, [nav.fen, nav.cursor])
+  }, [nav.fen, nav.cursor, motion.step])
 
   const later = useCallback((fn, ms) => {
     const id = setTimeout(fn, ms)
@@ -219,9 +214,10 @@ export default function Puzzles({ shared }) {
       // position, and the arrow keys stay bound to a puzzle that is gone.
       setRevealed(false)
       setMetaShown(false)
-      // A new puzzle starts at its own first position, so the blunder that
-      // sets it up is one step forward from there and animates like a move.
-      lastCursor.current = 0
+      // The new puzzle's position has nothing to do with the one being
+      // replaced, so it appears rather than sliding. The blunder that sets it
+      // up is a move from there, and does slide.
+      motion.jump(0)
       hintsUsed.current = 0
       setSaved(!!p.saved)
       setPhase('setup')
@@ -234,12 +230,16 @@ export default function Puzzles({ shared }) {
           to: p.setup_move.slice(2, 4),
           promotion: p.setup_move[4] || undefined,
         })
+        // The blunder the puzzle is about, played where you can watch it.
+        // Said here rather than left to the cursor, because this is the one
+        // move on the board that nothing else is driving.
+        motion.move()
         setBoard(after)
         setPhase('solving')
         startedAt.current = Date.now()
       }, 600)
     },
-    [clearLater, later],
+    [clearLater, later, motion.jump, motion.move],
   )
 
   const load = useCallback(
@@ -686,12 +686,14 @@ export default function Puzzles({ shared }) {
       ) : (
         <div className="puzzle-body">
           <div className="board-wrap">
-            <div className="frame">
+            <div className="frame" ref={frame}>
+              {boardWidth > 0 && (
               <Chessboard
+                boardWidth={boardWidth}
                 position={board ? board.fen() : 'start'}
                 onPieceDrop={(f, t) => tryMove(f, t)}
                 onSquareClick={onSquareClick}
-                animationDuration={animateMs}
+                animationDuration={motion.ms}
                 boardOrientation={puzzle?.color || 'white'}
                 arePiecesDraggable={live && phase === 'solving'}
                 customBoardStyle={{ borderRadius: '6px' }}
@@ -699,6 +701,7 @@ export default function Puzzles({ shared }) {
                 customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
                 customSquareStyles={squareStyles}
               />
+              )}
               <BoardOverlay
                 orientation={puzzle?.color || 'white'}
                 glow={hint?.glow}
