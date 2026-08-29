@@ -477,7 +477,6 @@ export default function App() {
         <>
           <div className="pagehead">
             <h1>Classroom</h1>
-            <p>Share a code with your team and see what they are getting wrong.</p>
           </div>
           <Classrooms
             roomID={roomID}
