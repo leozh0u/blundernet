@@ -67,6 +67,7 @@ type Server struct {
 	ranked        *store.Ranked
 	feedback      *store.Feedback
 	classrooms    *store.Classrooms
+	imports       *store.Imports
 	streak        *store.Streak
 	sessions      *store.Sessions
 	jobs          Enqueuer
@@ -99,6 +100,7 @@ func New(d Deps) *Server {
 	if d.Archive != nil {
 		s.feedback = store.NewFeedback(d.Archive.Pool())
 		s.classrooms = store.NewClassrooms(d.Archive.Pool())
+		s.imports = store.NewImports(d.Archive.Pool())
 	}
 	if d.Redis != nil {
 		s.limiter = store.NewLimiter(d.Redis)
@@ -157,6 +159,10 @@ func New(d Deps) *Server {
 	mux.HandleFunc("GET /api/classrooms/{id}/assignments", s.handleAssignmentList)
 	mux.HandleFunc("POST /api/classrooms/{id}/assignments", s.limit("attempt", s.limits.Move, s.handleAssignmentSet))
 	mux.HandleFunc("DELETE /api/classrooms/{id}/assignments/{assignment}", s.handleAssignmentDrop)
+	// Reviewing a pasted game is open to anyone, and costs engine time, so it
+	// sits on the create bucket rather than the loose puzzle one.
+	mux.HandleFunc("POST /api/review/pgn", s.limit("create", s.limits.CreateGame, s.handleImportCreate))
+	mux.HandleFunc("GET /api/review/{id}", s.handleImportReview)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/me/profile", s.handleProfile)
 	mux.HandleFunc("GET /api/me/games", s.handleHistory)
