@@ -1498,6 +1498,131 @@ button {
   padding-right: 1.2rem;
 }
 
+/* ---------- the coach's board ---------- */
+/* Board on the left, controls on the right, the same split the puzzle page
+   uses, so a coach who has used the site already knows where to look. */
+.room-board {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.coachboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 15rem;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.coachboard-main {
+  max-width: 30rem;
+}
+
+.coachboard-frame {
+  position: relative;
+  width: 100%;
+}
+
+/* The spare pieces. A row rather than a grid, because six pieces in a line
+   is how they sit beside a real board. */
+.tray {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem 0;
+  min-height: 52px;
+  align-items: center;
+}
+
+.coachboard-side h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.coachboard-help {
+  color: var(--ink-faint);
+  font-size: 0.92rem;
+  margin-bottom: 1rem;
+}
+
+.coachboard-actions {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.coachboard-turn {
+  margin-bottom: 1rem;
+}
+
+.coachboard-turn > span {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.coachboard-turn div {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.coachboard-fen-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+/* The FEN wraps and is selectable, because copying it by hand is the fallback
+   when the clipboard is refused, which browsers do outside a user gesture. */
+.coachboard-fen {
+  display: block;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  word-break: break-all;
+  user-select: all;
+}
+
+.coachboard-load {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.coachboard-load input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.coachboard-bad {
+  margin-top: 0.5rem;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 46rem) {
+  .coachboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Account page. Three cards for the three things the site keeps about you,
    each with the sentence that says what moves the numbers. */
 .profile .note {
