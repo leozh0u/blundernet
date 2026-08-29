@@ -86,6 +86,8 @@ func classroomError(w http.ResponseWriter, err error) {
 		httpError(w, http.StatusNotFound, "no open question")
 	case errors.Is(err, store.ErrQuestionClosed):
 		httpError(w, http.StatusConflict, "that question is closed")
+	case errors.Is(err, store.ErrBadAssignment):
+		httpError(w, http.StatusBadRequest, "an assignment needs a target between 1 and 100")
 	case errors.Is(err, store.ErrBadPrompt):
 		httpError(w, http.StatusBadRequest, "a question needs a position and a prompt under 140 characters")
 	default:
@@ -383,6 +385,93 @@ func (s *Server) handleQuestionClose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.classrooms.CloseQuestion(r.Context(), id, qid, user.ID); err != nil {
+		classroomError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Homework.
+
+type assignmentView struct {
+	ID        string `json:"id"`
+	Theme     string `json:"theme"`
+	MinRating int    `json:"min_rating"`
+	MaxRating int    `json:"max_rating"`
+	Target    int    `json:"target"`
+	Done      int    `json:"done"`
+	Class     int    `json:"class"`
+}
+
+func (s *Server) handleAssignmentList(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	list, err := s.classrooms.Assignments(r.Context(), id, user.ID)
+	if err != nil {
+		classroomError(w, err)
+		return
+	}
+	out := make([]assignmentView, 0, len(list))
+	for _, a := range list {
+		out = append(out, assignmentView{
+			ID: a.ID, Theme: a.Theme, MinRating: a.MinRating, MaxRating: a.MaxRating,
+			Target: a.Target, Done: a.Done, Class: a.Class,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"assignments": out})
+}
+
+func (s *Server) handleAssignmentSet(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body struct {
+		Theme     string `json:"theme"`
+		MinRating int    `json:"min_rating"`
+		MaxRating int    `json:"max_rating"`
+		Target    int    `json:"target"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	a, err := s.classrooms.SetAssignment(r.Context(), id, user.ID,
+		body.Theme, body.MinRating, body.MaxRating, body.Target)
+	if err != nil {
+		classroomError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, assignmentView{
+		ID: a.ID, Theme: a.Theme, MinRating: a.MinRating, MaxRating: a.MaxRating,
+		Target: a.Target,
+	})
+}
+
+func (s *Server) handleAssignmentDrop(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	work, ok := pathUUID(w, r, "assignment")
+	if !ok {
+		return
+	}
+	if err := s.classrooms.DropAssignment(r.Context(), id, work, user.ID); err != nil {
 		classroomError(w, err)
 		return
 	}
