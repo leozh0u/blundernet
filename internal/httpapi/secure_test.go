@@ -55,3 +55,39 @@ func TestOversizedBodyIsRefused(t *testing.T) {
 		t.Fatalf("oversized body accepted: %d", rec.Code)
 	}
 }
+
+func TestWebSocketOriginIsChecked(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.secureCookies = true // production
+
+	cases := []struct {
+		origin string
+		want   bool
+	}{
+		{"", true},                             // not a browser, no cookies to steal
+		{"https://blundernet.com", true},       // the site itself
+		{"https://evil.example", false},        // the attack this exists for
+		{"https://blundernet.com.evil", false}, // suffix trick
+		{"http://localhost:5173", false},       // dev origin, not in production
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest(http.MethodGet, "/api/games/x/ws", nil)
+		r.Host = "blundernet.com"
+		if c.origin != "" {
+			r.Header.Set("Origin", c.origin)
+		}
+		if got := s.sameOrigin(r); got != c.want {
+			t.Errorf("origin %q: allowed=%v, want %v", c.origin, got, c.want)
+		}
+	}
+
+	// The vite dev server proxies the socket, so the origin and the host never
+	// match in development and it has to be allowed there.
+	s.secureCookies = false
+	r := httptest.NewRequest(http.MethodGet, "/api/games/x/ws", nil)
+	r.Host = "localhost:8080"
+	r.Header.Set("Origin", "http://localhost:5173")
+	if !s.sameOrigin(r) {
+		t.Error("dev origin refused in development")
+	}
+}

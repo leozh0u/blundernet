@@ -564,12 +564,6 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, stats)
 }
 
-var upgrader = websocket.Upgrader{
-	// Same-origin in production (frontend is served by this binary); allow
-	// cross-origin for local vite dev.
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	g, err := s.games.Get(r.Context(), id)
@@ -577,6 +571,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		gameError(w, err)
 		return
 	}
+	// Built per server rather than as a package var, because the origin rule
+	// needs to know whether this is production. See sameOrigin.
+	upgrader := websocket.Upgrader{CheckOrigin: s.sameOrigin}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return

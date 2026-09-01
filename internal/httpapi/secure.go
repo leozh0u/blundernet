@@ -1,6 +1,10 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+	"net/url"
+	"strings"
+)
 
 // The headers and limits that have nothing to do with any one route.
 //
@@ -79,4 +83,41 @@ func (s *Server) secureHeaders(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// sameOrigin decides whether a WebSocket handshake is allowed to carry this
+// browser's cookies.
+//
+// This used to return true for everything, which is the default nearly every
+// example on the internet ships. It means any page anywhere can open a socket
+// to a game on this site with the visitor's cookies attached and read the
+// stream, because the same-origin policy does not apply to WebSockets the way
+// it applies to fetch. The cookies are SameSite=Lax, which does stop the
+// modern browsers, but a policy that only works because of a second unrelated
+// setting is not a policy.
+//
+// A request with no Origin at all is allowed: browsers always send one on a
+// handshake, so an absent Origin is a command line client, and those carry no
+// ambient cookies to steal.
+func (s *Server) sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(u.Host, r.Host) {
+		return true
+	}
+	// The vite dev server proxies the socket, so in development the Origin is
+	// the vite port and the Host is the api port and they never match. Allowed
+	// only when cookies are not being sent over HTTPS, which is to say only
+	// when this is not production.
+	if !s.secureCookies {
+		host := u.Hostname()
+		return host == "localhost" || host == "127.0.0.1" || host == "::1"
+	}
+	return false
 }
