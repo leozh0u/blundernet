@@ -176,7 +176,10 @@ func New(d Deps) *Server {
 	// Session resolution wraps the mux rather than sitting on each route, so
 	// a route added later cannot forget it. It never rejects, which is what
 	// keeps the anonymous paths working.
-	s.handler = s.withUser(mux)
+	//
+	// The body cap sits outermost so it applies before anything reads, and the
+	// headers sit inside it so they are set on the 413 too.
+	s.handler = capBody(s.secureHeaders(s.withUser(mux)))
 	return s
 }
 
