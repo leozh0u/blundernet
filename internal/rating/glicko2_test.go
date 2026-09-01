@@ -51,7 +51,7 @@ func TestUncertainRatingsMoveFurther(t *testing.T) {
 }
 
 func TestPlayingReducesUncertainty(t *testing.T) {
-	p := New()
+	p := Player{Rating: DefaultRating, Deviation: DefaultDeviation, Volatility: DefaultVolatility}
 	after := Update(p, []Result{{OpponentRating: 1500, OpponentDeviation: 50, Score: 1}})
 	if after.Deviation >= p.Deviation {
 		t.Errorf("deviation went from %.1f to %.1f; a played game should reduce it",

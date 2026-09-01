@@ -33,10 +33,6 @@ type Player struct {
 	Volatility float64
 }
 
-func New() Player {
-	return Player{Rating: DefaultRating, Deviation: DefaultDeviation, Volatility: DefaultVolatility}
-}
-
 // Result is one game against an opponent of known strength. Score is 1 for a
 // win, 0.5 for a draw, 0 for a loss.
 type Result struct {

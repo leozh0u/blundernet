@@ -44,10 +44,3 @@ export function tidyRecoveryCode(raw) {
   const chars = raw.toUpperCase().replace(/[^0-9A-HJKMNP-TV-Z]/g, '').slice(0, 25)
   return chars.replace(/(.{5})(?=.)/g, '$1-')
 }
-
-// Ratings are float64 on the wire because Glicko-2 works in fractions. Nobody
-// wants to read 953.9138774304494.
-export function displayRating(profile) {
-  if (!profile) return null
-  return Math.round(profile.rating)
-}

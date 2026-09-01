@@ -215,23 +215,6 @@ button {
 }
 
 /* ---------- masthead ---------- */
-.crest {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius);
-  background: var(--blue);
-  font-size: 1.2rem;
-  line-height: 1;
-  color: var(--ink-on-light);
-}
-
-.crest .knight {
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
 
 .titles h1 {
   font-size: 1.25rem;
@@ -467,12 +450,6 @@ button {
 .verdict h2 {
   font-size: 1.2rem;
   font-weight: 600;
-}
-
-.verdict .flavour {
-  margin-top: 0.25rem;
-  font-size: 0.97rem;
-  color: var(--ink-soft);
 }
 
 .verdict .cause {
@@ -762,9 +739,6 @@ button {
 @media (max-width: 820px) {
   .game {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .masthead {
-    flex-wrap: wrap;
   }
   .ledger {
     width: 100%;
@@ -2520,17 +2494,8 @@ button {
   cursor: default;
 }
 
-.answer-hint {
-  margin-left: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--ink-faint);
-}
-
 @media (max-width: 700px) {
   /* Arrow keys are not a thing on a phone, so the hint would be a lie. */
-  .answer-hint {
-    display: none;
-  }
 }
 
 /* ---------- recovery code ---------- */
