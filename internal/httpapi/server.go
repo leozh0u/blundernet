@@ -544,6 +544,15 @@ func (s *Server) afterChange(ctx context.Context, g *game.Game) {
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	// Every other handler checks its dependency and this one did not, so a
+	// binary started without Postgres answered /api/stats with a segfault
+	// instead of a 503. Nothing reaches it in production, where the archive is
+	// always wired, but "nothing reaches it" is not a reason to be the one
+	// handler that crashes the process.
+	if s.archive == nil {
+		httpError(w, http.StatusServiceUnavailable, "stats are not configured")
+		return
+	}
 	stats, err := s.archive.Stats(r.Context())
 	if err != nil {
 		internalError(w, err)
