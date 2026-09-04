@@ -505,6 +505,15 @@ button {
   overflow: hidden;
 }
 
+.record h3 {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
 .record .label {
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--line);
