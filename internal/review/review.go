@@ -392,25 +392,32 @@ func Game(ctx context.Context, a Analyser, moves []string) (*Result, error) {
 		lost := winBefore - winAfter
 		j := judge(lost, ucis[i], before.Best)
 
-		// Brilliant and Great are only ever awarded to the engine's own move,
-		// so they are decided here rather than inside judge, which knows the
-		// arithmetic but not the board.
-		if j == Best {
-			switch {
-			case sacrificed(positions[i], positions[i+1], positions[i].Turn()) >= sacrificeMin &&
-				winAfter >= brilliantFloor:
-				// Material given up, the engine still agrees, and the position
-				// held. Delivering mate with a queen sacrifice lands here,
-				// which is the case the label exists for.
+		// Brilliant and Great are decided here rather than inside judge, which
+		// knows the arithmetic but not the board.
+		//
+		// Brilliant does not require the engine to have picked the same move,
+		// only that the move cost nothing. Requiring it to be the engine's top
+		// choice was tried and it fails in exactly the case the label is for:
+		// on the live box, at the search time a review can afford, Stockfish
+		// prefers d4 to Nxe5 in Legal's Mate, so the most famous sacrifice in
+		// chess came back as "excellent". A move that gives up a queen and
+		// gains eight points of win percentage is brilliant whether or not a
+		// shallow search would have found it.
+		if j == Best || j == Excellent {
+			if sacrificed(positions[i], positions[i+1], positions[i].Turn()) >= sacrificeMin &&
+				winAfter >= brilliantFloor {
 				j = Brilliant
-			case before.Second != nil && winBefore <= liveMax &&
-				winBefore-WinPercent(engine.Analysis{
-					CP: before.Second.CP, Mate: before.Second.Mate,
-				}) >= onlyMoveGap:
-				// The runner up is scored from the same side's point of view
-				// as winBefore, so the two subtract directly.
-				j = Great
 			}
+		}
+		// Great stays tied to the engine's own move, because it is a claim
+		// about the alternatives and the engine is the only thing here with an
+		// opinion about those. The runner up is scored from the same side's
+		// point of view as winBefore, so the two subtract directly.
+		if j == Best && before.Second != nil && winBefore <= liveMax &&
+			winBefore-WinPercent(engine.Analysis{
+				CP: before.Second.CP, Mate: before.Second.Mate,
+			}) >= onlyMoveGap {
+			j = Great
 		}
 
 		m := Move{
