@@ -19,8 +19,15 @@ const budget = 20 * time.Second
 // The engine still needs enough time per position to say something useful. A
 // game long enough to hit this floor is analysed a little more roughly, which
 // is the right trade against being redelivered.
+//
+// The ceiling used to be 120ms, which left most of the budget unspent: a
+// thirteen move game is fourteen positions, so pacing offered it 1.4 seconds
+// each and the cap took 120ms. The engine then missed sacrifices it has the
+// time to see. Four hundred keeps a normal game inside a few seconds and
+// pacing still protects the long ones, since a hundred position game is back
+// under the cap on its own.
 const (
-	maxMoveTime = 120 * time.Millisecond
+	maxMoveTime = 400 * time.Millisecond
 	minMoveTime = 30 * time.Millisecond
 )
 
