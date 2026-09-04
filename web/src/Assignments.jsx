@@ -131,7 +131,7 @@ export default function Assignments({ classroomID, role }) {
                 </span>
 
                 {coach ? (
-                  <button className="link quiet" onClick={() => drop(a.id)}>
+                  <button className="action danger" onClick={() => drop(a.id)}>
                     remove
                   </button>
                 ) : (

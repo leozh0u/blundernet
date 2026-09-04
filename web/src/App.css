@@ -2796,3 +2796,44 @@ button {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.05);
 }
+
+/* ---------- actions that were hiding ---------- */
+/* A coach has to be able to find "stop taking answers" and "close this
+   session" while a room is live and people are waiting. These were .link.quiet,
+   which paints them --ink-faint at weight 400, and on the dark surface that is
+   close to invisible. They are controls, so they now look like controls.
+   Deliberately outlined rather than filled: findable without competing with
+   the thing the page is actually for. */
+.action {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.action:hover {
+  border-color: var(--ink-faint);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Ending a session or removing somebody cannot be undone from the UI, so it
+   says so on hover rather than looking like every other button until clicked. */
+.action.danger:hover {
+  border-color: #c2564d;
+  color: #e8867c;
+  background: rgba(194, 86, 77, 0.1);
+}
+
+/* In a table row the control should not push the row taller than the text. */
+.roster .action {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.88rem;
+}
+
+.room-actions {
+  margin-top: 1.25rem;
+}

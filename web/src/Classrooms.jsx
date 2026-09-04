@@ -229,7 +229,7 @@ export default function Classrooms({ roomID, onOpen }) {
               <button className="link" onClick={copy}>
                 {copied ? 'copied' : 'copy'}
               </button>
-              <button className="link quiet" onClick={rotate}>
+              <button className="action" onClick={rotate}>
                 new code
               </button>
             </div>
@@ -261,7 +261,7 @@ export default function Classrooms({ roomID, onOpen }) {
                 {coach && (
                   <td>
                     {m.user_id !== user.id && (
-                      <button className="link quiet" onClick={() => remove(m.user_id)}>
+                      <button className="action danger" onClick={() => remove(m.user_id)}>
                         remove
                       </button>
                     )}
@@ -292,11 +292,11 @@ export default function Classrooms({ roomID, onOpen }) {
 
         <div className="room-actions">
           {coach ? (
-            <button className="link quiet" onClick={() => close(room.id)}>
+            <button className="action danger" onClick={() => close(room.id)}>
               Close this session
             </button>
           ) : (
-            <button className="link quiet" onClick={() => leaveRoom(room.id)}>
+            <button className="action" onClick={() => leaveRoom(room.id)}>
               Leave
             </button>
           )}
@@ -320,7 +320,7 @@ export default function Classrooms({ roomID, onOpen }) {
                 </span>
               </button>
               <button
-                className="link quiet room-end"
+                className="action room-end"
                 onClick={() => (r.role === 'coach' ? close(r.id) : leaveRoom(r.id))}
               >
                 {r.role === 'coach' ? 'close' : 'leave'}

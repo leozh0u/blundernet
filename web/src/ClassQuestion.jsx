@@ -183,7 +183,7 @@ export default function ClassQuestion({ classroomID, role, refreshKey }) {
                   ))}
                 </ul>
               )}
-              <button className="link quiet" onClick={close}>
+              <button className="action danger" onClick={close}>
                 Stop taking answers
               </button>
             </>
