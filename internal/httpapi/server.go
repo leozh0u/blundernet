@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"time"
 
@@ -622,6 +623,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// Go's mime table has no entry for .webmanifest, so the file would go out as
+// text/plain and some browsers refuse to parse it. Registered once at load.
+func init() {
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 }
 
 // spaHandler serves the embedded frontend, falling back to index.html for
