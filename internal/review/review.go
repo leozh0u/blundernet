@@ -19,6 +19,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/notnil/chess"
 
@@ -37,6 +38,17 @@ type Analyser interface {
 type Judgement string
 
 const (
+	// Brilliant and Great sit above Best, and both are claims about the
+	// position rather than about the size of a mistake, which is why they need
+	// more than the win percentage lost.
+	//
+	// Brilliant is a sacrifice that works: you gave up material, the engine
+	// agrees with the move anyway, and you are not losing afterwards.
+	//
+	// Great is the only move that held. Every other move available drops a
+	// meaningful share of your chances, so finding this one was the game.
+	Brilliant  Judgement = "brilliant"
+	Great      Judgement = "great"
 	Best       Judgement = "best"
 	Excellent  Judgement = "excellent"
 	Good       Judgement = "good"
@@ -54,6 +66,30 @@ const (
 	goodLoss       = 5.0
 	inaccuracyLoss = 10.0
 	mistakeLoss    = 20.0
+)
+
+// What Brilliant and Great require, beyond being the engine's move.
+const (
+	// Material given up, in pawns, counted after the opponent has played their
+	// best reply, so an ordinary trade nets to nothing and only a real
+	// sacrifice clears the bar. Three is a minor piece: the exchange alone is
+	// not brilliant, it is just an exchange sacrifice, and calling those
+	// brilliant is how the label stops meaning anything.
+	sacrificeMin = 3.0
+	// Sacrificing into a lost position is not brilliant, it is losing. Fifty
+	// is level.
+	brilliantFloor = 45.0
+	// How much worse the second best move has to be before the move played
+	// counts as the only one. Twenty points of win percentage is the mistake
+	// threshold, so the claim is exact: every other move on the board would
+	// have been at least a mistake. Ten was tried first and handed out six of
+	// these in a single game, which is how a label stops meaning anything.
+	onlyMoveGap = 20.0
+	// Great is about holding a game together, so it is only offered while
+	// there is a game to hold. In a position already winning by this much the
+	// second best move is worse than the best one and both still win, and
+	// calling that the only move would be a lie about the stakes.
+	liveMax = 90.0
 )
 
 // Move is one move, judged.
@@ -90,6 +126,8 @@ type Result struct {
 }
 
 type Counts struct {
+	Brilliant  int `json:"brilliant"`
+	Great      int `json:"great"`
 	Best       int `json:"best"`
 	Excellent  int `json:"excellent"`
 	Good       int `json:"good"`
@@ -100,6 +138,10 @@ type Counts struct {
 
 func (c *Counts) add(j Judgement) {
 	switch j {
+	case Brilliant:
+		c.Brilliant++
+	case Great:
+		c.Great++
 	case Best:
 		c.Best++
 	case Excellent:
@@ -161,13 +203,135 @@ func judge(lost float64, played, best string) Judgement {
 	}
 }
 
-// Game reviews a whole game from its UCI moves.
+// pieceValue is the ordinary count, used only to decide whether material was
+// given up. The king is left out because it is never captured, so it cannot be
+// part of a sacrifice.
+var pieceValue = map[chess.PieceType]float64{
+	chess.Pawn: 1, chess.Knight: 3, chess.Bishop: 3, chess.Rook: 5, chess.Queen: 9,
+}
+
+// material counts what one colour has on the board.
+func material(pos *chess.Position, c chess.Color) float64 {
+	var total float64
+	board := pos.Board()
+	for sq := chess.A1; sq <= chess.H8; sq++ {
+		p := board.Piece(sq)
+		if p == chess.NoPiece || p.Color() != c {
+			continue
+		}
+		total += pieceValue[p.Type()]
+	}
+	return total
+}
+
+// exchangeOn is a static exchange evaluation: if the side to move starts
+// taking on this square and both sides keep taking with their cheapest
+// available piece, how much material does the side to move come out ahead?
 //
-// One analysis per position, not two. The engine's opinion of the position
-// before your move gives both what you could have had and what the best move
-// was; its opinion of the position after gives what you actually got. Every
-// position is therefore asked about exactly once, which halves the work
-// compared to scoring each move independently.
+// Written rather than borrowed because it answers the one question the review
+// needs and nothing else: was material actually on offer. Counting attackers
+// is not enough, because a piece attacked twice and defended twice is not
+// hanging, and only playing the exchange out tells you which.
+//
+// The max with zero at each step is the part that makes it correct: either
+// side can decline to continue the exchange, so nobody is forced into a
+// losing recapture just because a capture was available.
+func exchangeOn(pos *chess.Position, sq chess.Square, depth int) float64 {
+	// Bounded because each level plays a real move, and a pathological
+	// position should not turn one judged move into an unbounded search.
+	if depth <= 0 {
+		return 0
+	}
+	target := pos.Board().Piece(sq)
+	if target == chess.NoPiece {
+		return 0
+	}
+	var best *chess.Move
+	cheapest := math.Inf(1)
+	for _, mv := range pos.ValidMoves() {
+		if mv.S2() != sq {
+			continue
+		}
+		v := pieceValue[pos.Board().Piece(mv.S1()).Type()]
+		if pos.Board().Piece(mv.S1()).Type() == chess.King {
+			// The king can only take last, and only when nothing defends.
+			v = 100
+		}
+		if v < cheapest {
+			cheapest, best = v, mv
+		}
+	}
+	if best == nil {
+		return 0
+	}
+	gain := pieceValue[target.Type()] - exchangeOn(pos.Update(best), sq, depth-1)
+	return math.Max(0, gain)
+}
+
+// onOffer is the most material the given colour could win by capturing, if it
+// were their turn.
+//
+// The null move is the only way to ask this: the question is what the opponent
+// can take in reply to a move, which means looking at the position as though
+// it were already theirs. A position where the side being asked about has the
+// other king in check is not a legal null move and is skipped rather than
+// guessed at.
+func onOffer(pos *chess.Position, side chess.Color) float64 {
+	if pos.Turn() != side {
+		flipped, err := chess.FEN(nullMoveFEN(pos, side))
+		if err != nil {
+			return 0
+		}
+		g := chess.NewGame(flipped)
+		pos = g.Position()
+	}
+	var most float64
+	board := pos.Board()
+	for sq := chess.A1; sq <= chess.H8; sq++ {
+		p := board.Piece(sq)
+		if p == chess.NoPiece || p.Color() == side {
+			continue
+		}
+		if v := exchangeOn(pos, sq, 8); v > most {
+			most = v
+		}
+	}
+	return most
+}
+
+// nullMoveFEN rewrites a position with the other side to move. En passant is
+// dropped because the capture it records is no longer available to the side
+// now moving, and keeping it would generate a move that is not there.
+func nullMoveFEN(pos *chess.Position, side chess.Color) string {
+	f := strings.Fields(pos.String())
+	if len(f) < 6 {
+		return pos.String()
+	}
+	if side == chess.White {
+		f[1] = "w"
+	} else {
+		f[1] = "b"
+	}
+	f[3] = "-"
+	return strings.Join(f, " ")
+}
+
+// sacrificed reports how much material the mover left on the table.
+//
+// A sacrifice is the offer, not the acceptance. The first version of this
+// measured material after the opponent's best reply, and on Legal's Mate it
+// found nothing: the engine's best reply is to decline the queen, so by that
+// measure nothing was ever given. That is backwards. The queen being takeable
+// and it not mattering is the whole point of the move.
+//
+// So this asks what the opponent could win if they took, anywhere on the
+// board, and subtracts whatever the move itself captured, which is what stops
+// an ordinary recapture from reading as a gift.
+func sacrificed(before, after *chess.Position, mover chess.Color) float64 {
+	gained := material(before, mover.Other()) - material(after, mover.Other())
+	return onOffer(after, mover.Other()) - gained
+}
+
 func Game(ctx context.Context, a Analyser, moves []string) (*Result, error) {
 	positions := []*chess.Position{chess.NewGame().Position()}
 	sans := make([]string, 0, len(moves))
@@ -226,6 +390,29 @@ func Game(ctx context.Context, a Analyser, moves []string) (*Result, error) {
 		}
 
 		lost := winBefore - winAfter
+		j := judge(lost, ucis[i], before.Best)
+
+		// Brilliant and Great are only ever awarded to the engine's own move,
+		// so they are decided here rather than inside judge, which knows the
+		// arithmetic but not the board.
+		if j == Best {
+			switch {
+			case sacrificed(positions[i], positions[i+1], positions[i].Turn()) >= sacrificeMin &&
+				winAfter >= brilliantFloor:
+				// Material given up, the engine still agrees, and the position
+				// held. Delivering mate with a queen sacrifice lands here,
+				// which is the case the label exists for.
+				j = Brilliant
+			case before.Second != nil && winBefore <= liveMax &&
+				winBefore-WinPercent(engine.Analysis{
+					CP: before.Second.CP, Mate: before.Second.Mate,
+				}) >= onlyMoveGap:
+				// The runner up is scored from the same side's point of view
+				// as winBefore, so the two subtract directly.
+				j = Great
+			}
+		}
+
 		m := Move{
 			Ply:       i + 1,
 			SAN:       sans[i],
@@ -233,11 +420,11 @@ func Game(ctx context.Context, a Analyser, moves []string) (*Result, error) {
 			White:     i%2 == 0,
 			WinBefore: round(winBefore),
 			WinAfter:  round(winAfter),
-			Judgement: judge(lost, ucis[i], before.Best),
+			Judgement: j,
 			Accuracy:  round(accuracyOf(lost)),
 			FEN:       positions[i+1].String(),
 		}
-		if m.Judgement != Best && before.Best != "" {
+		if ucis[i] != before.Best && before.Best != "" {
 			m.Better = before.Best
 			if mv := findMove(positions[i], before.Best); mv != nil {
 				m.BetterSAN = chess.AlgebraicNotation{}.Encode(positions[i], mv)

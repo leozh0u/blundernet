@@ -178,3 +178,130 @@ func TestAGameThatWillNotReplayIsRefused(t *testing.T) {
 		t.Error("an illegal first move was accepted")
 	}
 }
+
+// The two labels that are claims about the position rather than about the size
+// of a mistake. Both are easy to hand out too freely, and a "brilliant" that
+// fires on an ordinary recapture is worse than not having the label at all.
+
+// Legal's Mate, where White gives up the queen and mates with three minor
+// pieces. If any position in chess should be called brilliant, it is Qxf7.
+func TestAQueenSacrificeThatMatesIsBrilliant(t *testing.T) {
+	moves := []string{
+		"e2e4", "e7e5", "g1f3", "d7d6", "f1c4", "c8g4", "b1c3", "g7g6",
+		"f3e5", "g4d1", "c4f7", "e8e7", "c3d5",
+	}
+	// Every position is called even until the sacrifice, which is deliberate:
+	// it forces the label to come from the material and the result rather than
+	// from the evaluation swinging.
+	evals := make([]engine.Analysis, len(moves)+1)
+	for i := range evals {
+		evals[i] = engine.Analysis{CP: 0, Best: bestAt(moves, i)}
+	}
+	// The mating move, and the position after it, which is checkmate.
+	evals[len(moves)-1] = engine.Analysis{Mate: 1, Best: moves[len(moves)-1]}
+
+	got, err := Game(context.Background(), &fixed{evals: evals}, moves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The sacrifice is Nxe5, which offers the queen. The mate three moves
+	// later is the payoff and costs nothing by itself, so the label belongs on
+	// the move that gave the material away rather than the one that finished.
+	var sac *Move
+	for i := range got.Moves {
+		if got.Moves[i].SAN == "Nxe5" {
+			sac = &got.Moves[i]
+		}
+	}
+	if sac == nil {
+		t.Fatal("the game did not replay as expected, no Nxe5")
+	}
+	if sac.Judgement != Brilliant {
+		t.Errorf("offering the queen was judged %q, want brilliant", sac.Judgement)
+	}
+	if got.White.Brilliant != 1 {
+		t.Errorf("White has %d brilliant moves, want exactly 1", got.White.Brilliant)
+	}
+	// The mate itself takes no material risk, so it must not also be dressed up.
+	if last := got.Moves[len(got.Moves)-1]; last.Judgement == Brilliant {
+		t.Errorf("%s was called brilliant, but it sacrifices nothing", last.SAN)
+	}
+}
+
+// The label has to cost something to earn. An ordinary recapture gives up
+// nothing once the dust settles, so it stays Best.
+func TestAnEvenTradeIsNotBrilliant(t *testing.T) {
+	// 1. e4 d5 2. exd5 Qxd5: White wins a pawn and Black takes it straight
+	// back. Nobody sacrificed anything.
+	moves := []string{"e2e4", "d7d5", "e4d5", "d8d5"}
+	evals := make([]engine.Analysis, len(moves)+1)
+	for i := range evals {
+		evals[i] = engine.Analysis{CP: 0, Best: bestAt(moves, i)}
+	}
+	got, err := Game(context.Background(), &fixed{evals: evals}, moves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range got.Moves {
+		if m.Judgement == Brilliant {
+			t.Errorf("%s was called brilliant in a game with no sacrifice", m.SAN)
+		}
+	}
+}
+
+// Great is "the only move that held". It needs a runner up that is clearly
+// worse, and it must not fire in a position that is already decided.
+func TestGreatNeedsTheAlternativesToBeWorse(t *testing.T) {
+	moves := []string{"e2e4", "e7e5"}
+
+	// A close position where the second best move throws the balance away.
+	only := []engine.Analysis{
+		{CP: 20, Best: "e2e4", Second: &engine.Line{CP: -400, Move: "f2f3"}},
+		{CP: -20, Best: "e7e5"},
+		{CP: 20, Best: "g1f3"},
+	}
+	got, err := Game(context.Background(), &fixed{evals: only}, moves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Moves[0].Judgement != Great {
+		t.Errorf("the only move that held was judged %q, want great", got.Moves[0].Judgement)
+	}
+
+	// The same shape, but there was a perfectly good alternative.
+	spoilt := []engine.Analysis{
+		{CP: 20, Best: "e2e4", Second: &engine.Line{CP: 15, Move: "d2d4"}},
+		{CP: -20, Best: "e7e5"},
+		{CP: 20, Best: "g1f3"},
+	}
+	got, err = Game(context.Background(), &fixed{evals: spoilt}, moves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Moves[0].Judgement != Best {
+		t.Errorf("a move with a fine alternative was judged %q, want best", got.Moves[0].Judgement)
+	}
+
+	// Already completely winning, so no single move is holding anything up.
+	decided := []engine.Analysis{
+		{Mate: 3, Best: "e2e4", Second: &engine.Line{CP: 200, Move: "d2d4"}},
+		{CP: -20, Best: "e7e5"},
+		{CP: 20, Best: "g1f3"},
+	}
+	got, err = Game(context.Background(), &fixed{evals: decided}, moves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Moves[0].Judgement == Great {
+		t.Error("a move in an already won position was called great")
+	}
+}
+
+// bestAt makes the engine agree with whatever was played, so a test about
+// material is not accidentally a test about the move being second choice.
+func bestAt(moves []string, i int) string {
+	if i >= len(moves) {
+		return ""
+	}
+	return moves[i]
+}
