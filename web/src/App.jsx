@@ -596,17 +596,10 @@ export default function App() {
               order: what level, and who decides it. They used to answer them
               in three different shapes, which made the row read as three
               unrelated controls. */}
-          <div className="levels">
-            {mode === 'friend' ? (
-              <>
-                <span className="filter-label">Side</span>
-                <p className="levels-note">
-                  Pick a side below and you get a link to send. The game is unrated.
-                </p>
-              </>
-            ) : mode === 'learning' ? (
-              <>
-                <span className="filter-label">Level</span>
+          {mode !== 'friend' && (
+            <div className="levels">
+              <span className="filter-label">Level</span>
+              {mode === 'learning' ? (
                 <div className="chips">
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <button
@@ -619,24 +612,15 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <p className="levels-note">
-                  Pick any of the six. Learning games leave your rating alone.
-                </p>
-              </>
-            ) : (
-              <>
-                <span className="filter-label">Level</span>
-                {/* Deliberately not a row of chips like learning above. In
-                    rated the level is the result rather than the setting, and
-                    showing it as buttons you cannot press would be a worse
-                    lie than showing it as a number. */}
+              ) : (
+                /* Deliberately not a row of chips like learning above. In
+                   rated the level is the result rather than the setting, and
+                   showing it as buttons you cannot press would be a worse lie
+                   than showing it as a number. */
                 <strong className="levels-value">{ladder || 3}</strong>
-                <p className="levels-note">
-                  Set by how you do. Win and it goes up, lose and it comes down.
-                </p>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
           {/* Both of these start a game, so they are labelled as the choice
               they are. Without the heading the pair reads as a setting that
               has already been made rather than a question being asked. */}

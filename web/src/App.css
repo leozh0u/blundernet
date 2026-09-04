@@ -1267,21 +1267,6 @@ button {
   font-weight: 600;
 }
 
-.levels-note {
-  flex-basis: 100%;
-  max-width: 34rem;
-  font-size: 0.95rem;
-  color: var(--ink-faint);
-}
-
-/* On a wide row the sentence can sit beside the control instead of under it,
-   but only once there is room for both without crowding. */
-@media (min-width: 900px) {
-  .levels-note {
-    flex-basis: auto;
-  }
-}
-
 .ladder {
   font-size: 1.05rem;
   font-weight: 600;
