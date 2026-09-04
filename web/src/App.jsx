@@ -750,7 +750,7 @@ export default function App() {
                     <div className="again">
                       <button onClick={() => newGame('white')}>Again as White</button>
                       <button className="ghost" onClick={() => newGame('black')}>
-                        as Black
+                        Again as Black
                       </button>
                     </div>
                   </div>

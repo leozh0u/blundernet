@@ -423,7 +423,9 @@ button {
 }
 
 .verdict {
-  width: min(18rem, 80%);
+  /* Wide enough for two full button labels side by side. At 18rem "Again as
+     White" wrapped onto two lines and the pair looked broken again. */
+  width: min(23rem, 90%);
   padding: 1.5rem;
   border-radius: var(--radius);
   background: var(--surface);
@@ -552,6 +554,22 @@ button {
   color: var(--ink-faint);
 }
 
+/* Two equal buttons on one row. There was no container rule here at all, so
+   the pair fell into normal flow at their own text widths and read as a
+   mistake. */
+.again {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.again button {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  white-space: nowrap;
+}
+
 .ghost,
 .again button {
   padding: 0.55rem 1.1rem;
@@ -582,6 +600,20 @@ button {
 
 .again button:hover {
   background: var(--blue-deep);
+}
+
+/* Playing the other colour is the second choice, so it looks like one. This
+   used to be given .ghost and then repainted blue by the rule above. */
+.again button.ghost {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.again button.ghost:hover {
+  background: transparent;
+  border-color: var(--ink-faint);
 }
 
 /* ---------- search tree ---------- */
