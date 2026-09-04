@@ -33,6 +33,15 @@ const COMMON_THEMES = [
   'xRayAttack', 'capturingDefender', 'mateIn1', 'mateIn2', 'mateIn3',
 ]
 
+// What a saved row says about a puzzle. Only the tactical tags, because the
+// corpus also carries phases, lengths and notes about the source game, and a
+// row reading "Endgame, Master" says nothing you can act on.
+const describe = (p) => {
+  const tactics = (p.themes || []).filter((t) => COMMON_THEMES.includes(t))
+  if (tactics.length > 0) return tactics.slice(0, 2).map(titleCase).join(', ')
+  return titleCase(p.phase || '')
+}
+
 const RATING_BANDS = [
   { label: 'Any rating', min: 0, max: 0 },
   { label: 'Under 1200', min: 0, max: 1200 },
@@ -130,6 +139,9 @@ export default function Puzzles({ shared }) {
   const [openings, setOpenings] = useState([])
   // 'search' is the corpus, the other two are your own lists. The account
   // page links straight into one of them, so the choice comes from the URL.
+  // The loaded list behind a non-search source. The queue drives the drill,
+  // this drives the panel you can look at and click.
+  const [list, setList] = useState([])
   const [source, setSource] = useState(
     () => new URLSearchParams(window.location.search).get('drill') || 'search',
   )
@@ -184,8 +196,10 @@ export default function Puzzles({ shared }) {
   const fetchBatch = useCallback(
     async (f) => {
       if (source !== 'search') {
+        // Your own lists are finite and you want to see them, so this asks for
+        // all of them (fifty is the server's cap) instead of a drill batch.
         const path = source === 'wrong' ? 'failed' : 'favourites'
-        const res = await fetch(`/api/puzzles/${path}?limit=10`)
+        const res = await fetch(`/api/puzzles/${path}?limit=50`)
         if (!res.ok) throw new Error('That list could not be loaded. Try again.')
         return (await res.json()).puzzles || []
       }
@@ -250,6 +264,7 @@ export default function Puzzles({ shared }) {
       setError('')
       try {
         const batch = await fetchBatch(f)
+        setList(source === 'search' ? [] : batch)
         if (batch.length === 0) {
           setPuzzle(null)
           setPhase('empty')
@@ -262,7 +277,7 @@ export default function Puzzles({ shared }) {
         setPhase('empty')
       }
     },
-    [fetchBatch, present],
+    [fetchBatch, present, source],
   )
 
   useEffect(() => {
@@ -328,6 +343,33 @@ export default function Puzzles({ shared }) {
     await load(filter)
   }, [queue, filter, present, load, fetchBatch])
 
+  // Clicking an entry opens it and makes the rest of the list the queue, so
+  // "next" carries on from where you jumped rather than from where you were.
+  const openFromList = useCallback(
+    (id) => {
+      const at = list.findIndex((p) => p.id === id)
+      if (at < 0) return
+      setQueue(list.slice(at + 1))
+      present(list[at])
+    },
+    [list, present],
+  )
+
+  // Unsaving from the list, which is the only way to clear something you are
+  // not currently looking at. The row goes immediately and comes back if the
+  // write fails, the same trade the star makes.
+  const unsave = useCallback(
+    async (id) => {
+      const before = list
+      setList((l) => l.filter((p) => p.id !== id))
+      setQueue((q) => q.filter((p) => p.id !== id))
+      if (puzzle?.id === id) setSaved(false)
+      const res = await fetch(`/api/puzzles/${id}/favourite`, { method: 'DELETE' })
+      if (!res.ok) setList(before)
+    },
+    [list, puzzle],
+  )
+
   // Saving is a toggle, and the star flips before the request lands. If the
   // write fails the star goes back, which is a better trade than making
   // somebody wait on a round trip to see a star fill in.
@@ -335,6 +377,9 @@ export default function Puzzles({ shared }) {
     if (!puzzle) return
     const next = !saved
     setSaved(next)
+    if (source === 'saved' && !next) {
+      setList((l) => l.filter((p) => p.id !== puzzle.id))
+    }
     const res = await fetch(`/api/puzzles/${puzzle.id}/favourite`, {
       method: next ? 'POST' : 'DELETE',
     })
@@ -670,6 +715,44 @@ export default function Puzzles({ shared }) {
           </select>
         </div>
       </section>
+
+      {/* Your own lists are things to browse, so they get a panel you can see
+          and click. The search does not: it is an endless stream and a list of
+          ten off the front of six million would suggest otherwise. */}
+      {source !== 'search' && list.length > 0 && (
+        <section className="saved-list">
+          <div className="saved-head">
+            <h2>{source === 'saved' ? 'Saved puzzles' : 'Ones you got wrong'}</h2>
+            <span className="saved-count">
+              {list.length === 1 ? '1 puzzle' : `${list.length} puzzles`}
+            </span>
+          </div>
+          <ul>
+            {list.map((p, i) => (
+              <li key={p.id} className={puzzle?.id === p.id ? 'on' : ''}>
+                <button className="saved-open" onClick={() => openFromList(p.id)}>
+                  <span className="saved-n">{i + 1}</span>
+                  <span className="saved-rating">{p.rating}</span>
+                  <span className="saved-themes">{describe(p)}</span>
+                  <span className="saved-len">
+                    {p.moves === 1 ? '1 move' : `${p.moves} moves`}
+                  </span>
+                </button>
+                {source === 'saved' && (
+                  <button
+                    className="saved-drop"
+                    onClick={() => unsave(p.id)}
+                    title="Remove from saved"
+                    aria-label={`Remove puzzle ${i + 1} from saved`}
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {phase === 'empty' ? (
         <section className="puzzle-empty">

@@ -2687,3 +2687,112 @@ button {
 .soundbtn[aria-pressed='false'] {
   color: var(--line-strong);
 }
+
+/* ---------- your own puzzle lists ---------- */
+/* The saved and wrong lists are finite and worth looking at, unlike the search,
+   which is a stream. Before this they could only be drilled one at a time with
+   no way to see what was in them, jump to one, or remove one you were not
+   currently looking at. */
+.saved-list {
+  margin-bottom: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.saved-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.saved-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.saved-count {
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+}
+
+.saved-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.saved-list li {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+
+.saved-list li:last-child {
+  border-bottom: 0;
+}
+
+.saved-list li.on {
+  background: rgba(74, 144, 217, 0.14);
+}
+
+.saved-open {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 2rem 3.2rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 0.94rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.saved-open:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.saved-n,
+.saved-len {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-rating {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-themes {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Kept quiet until hover: removing something is not the reason you opened
+   the list, so it should not be the loudest thing in the row. */
+.saved-drop {
+  padding: 0 0.85rem;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: none;
+  color: var(--ink-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.saved-drop:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+}
