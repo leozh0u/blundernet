@@ -11,6 +11,8 @@ import Ranked from './Ranked.jsx'
 import Profile from './Profile.jsx'
 import Streak from './Streak.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
+import { useBlindfold } from './board.js'
+import { PositionText, BlindfoldButton } from './Position.jsx'
 import Logo from './Logo.jsx'
 import { sound } from './sound.js'
 import Feedback from './Feedback.jsx'
@@ -229,6 +231,7 @@ export default function App() {
   // room you just left.
   const [roomID, setRoomID] = useState(() => openRoomID(window.location.pathname))
   const [state, setState] = useState(null)
+  const blindfold = useBlindfold()
   // Bumped when a game reaches a terminal state, which is the only moment the
   // rating can have moved. Polling the profile on a timer would be busywork.
   const [ratingKey, setRatingKey] = useState(0)
@@ -724,7 +727,7 @@ export default function App() {
       ) : (
         <main className="game">
           <div className="board-wrap">
-            <div className="frame">
+            <div className={`frame ${blindfold.className}`}>
               <Chessboard
                 position={state.fen}
                 onPieceDrop={(f, t) => tryMove(f, t)}
@@ -736,6 +739,7 @@ export default function App() {
                 customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
                 customSquareStyles={squareStyles}
               />
+              <PositionText board={new Chess(state.fen)} />
               <BoardOverlay
                 orientation={myColor}
                 glow={hint?.from}
@@ -853,6 +857,11 @@ export default function App() {
                     Hint
                   </button>
                 )}
+                <BlindfoldButton
+                  on={blindfold.on}
+                  onToggle={blindfold.toggle}
+                  className="ghost wide"
+                />
                 <button className="ghost wide" onClick={() => api.resign(state.id)}>
                   Resign
                 </button>
