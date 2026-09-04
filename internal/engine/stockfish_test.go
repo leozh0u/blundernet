@@ -78,23 +78,69 @@ func TestAFinishedPositionHasNoMove(t *testing.T) {
 	}
 }
 
-func TestParseScore(t *testing.T) {
+func TestParseLine(t *testing.T) {
 	cases := []struct {
 		line string
+		rank int
 		cp   int
 		mate int
+		move string
 		ok   bool
 	}{
-		{"info depth 20 score cp -45 nodes 1000 pv e2e4", -45, 0, true},
-		{"info depth 3 score mate -2 pv e2e4", 0, -2, true},
-		{"info depth 1 currmove e2e4 currmovenumber 1", 0, 0, false},
-		{"bestmove e2e4", 0, 0, false},
+		// An engine on MultiPV 1 prints no multipv field, so the rank has to
+		// default rather than be read.
+		{"info depth 20 score cp -45 nodes 1000 pv e2e4", 1, -45, 0, "e2e4", true},
+		{"info depth 3 score mate -2 pv e2e4", 1, 0, -2, "e2e4", true},
+		{"info depth 18 multipv 2 score cp 12 nodes 900 pv d2d4 d7d5", 2, 12, 0, "d2d4", true},
+		{"info depth 1 currmove e2e4 currmovenumber 1", 0, 0, 0, "", false},
+		{"bestmove e2e4", 0, 0, 0, "", false},
 	}
 	for _, c := range cases {
-		cp, mate, ok := parseScore(c.line)
-		if cp != c.cp || mate != c.mate || ok != c.ok {
-			t.Errorf("parseScore(%q) = %d, %d, %v; want %d, %d, %v",
-				c.line, cp, mate, ok, c.cp, c.mate, c.ok)
+		rank, l, ok := parseLine(c.line)
+		if rank != c.rank || l.CP != c.cp || l.Mate != c.mate || l.Move != c.move || ok != c.ok {
+			t.Errorf("parseLine(%q) = %d, %+v, %v; want %d, {CP:%d Mate:%d Move:%q}, %v",
+				c.line, rank, l, ok, c.rank, c.cp, c.mate, c.move, c.ok)
 		}
+	}
+}
+
+// The runner up, read from a real engine rather than from a fixture.
+//
+// This is here because the parsing is the only part of MultiPV that can go
+// wrong quietly: with the field misread, every position reports a runner up
+// identical to the best move, the review stops handing out "great", and
+// nothing errors.
+func TestMultiPVReportsARunnerUp(t *testing.T) {
+	if _, err := exec.LookPath("stockfish"); err != nil {
+		t.Skip("stockfish is not installed")
+	}
+	s, err := NewStockfish(StockfishOptions{MoveTime: 300 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	a, err := s.Analyse(context.Background(), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Best == "" {
+		t.Fatal("no best move from the opening position")
+	}
+	if a.Second == nil {
+		t.Fatal("no runner up, so the multipv field is not being read")
+	}
+	if a.Second.Move == a.Best {
+		t.Errorf("runner up %q is the same move as best", a.Second.Move)
+	}
+
+	// A mate score alongside a multipv field, since the two are parsed in the
+	// same pass and a mate must not come back as a centipawn score of zero.
+	m, err := s.Analyse(context.Background(), "6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Mate == 0 {
+		t.Errorf("a forced mate reported cp %d, mate %d", m.CP, m.Mate)
 	}
 }

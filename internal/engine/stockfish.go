@@ -28,6 +28,16 @@ import (
 // there is no request id, so two callers interleaving "go" and reading lines
 // would read each other's answers.
 
+// Line is one candidate move and what the engine thinks of playing it.
+type Line struct {
+	// CP and Mate are scored from the point of view of the side to move, the
+	// same way Analysis is.
+	CP   int
+	Mate int
+	// Move is the first move of the line, in UCI.
+	Move string
+}
+
 // Analysis is what the engine thinks of one position.
 type Analysis struct {
 	// Score in centipawns from the point of view of the side to move.
@@ -38,6 +48,13 @@ type Analysis struct {
 	Mate int
 	// Best is the move the engine would play, in UCI.
 	Best string
+	// Second is the engine's runner up, present only when MultiPV is above one
+	// and the position has more than one legal move.
+	//
+	// It exists to answer "was there another way", which is the difference
+	// between a move that was good and a move that was the only one. Nothing
+	// else in the review can tell those apart.
+	Second *Line
 }
 
 // Mated reports whether the position is already over, which the engine
@@ -78,6 +95,9 @@ type StockfishOptions struct {
 	Threads  int
 	HashMB   int
 	MoveTime time.Duration
+	// MultiPV is how many candidate moves the engine reports. Two is what the
+	// review wants; one is enough for anything that only needs a move.
+	MultiPV int
 }
 
 func (o StockfishOptions) withDefaults() StockfishOptions {
@@ -95,6 +115,9 @@ func (o StockfishOptions) withDefaults() StockfishOptions {
 	}
 	if o.MoveTime == 0 {
 		o.MoveTime = 120 * time.Millisecond
+	}
+	if o.MultiPV == 0 {
+		o.MultiPV = 2
 	}
 	return o
 }
@@ -127,9 +150,11 @@ func NewStockfish(opts StockfishOptions) (*Stockfish, error) {
 	for _, opt := range []string{
 		fmt.Sprintf("setoption name Threads value %d", opts.Threads),
 		fmt.Sprintf("setoption name Hash value %d", opts.HashMB),
-		// Multiple lines would let us show the second best move too, and cost
-		// search quality at this time control for something no one asked for.
-		"setoption name MultiPV value 1",
+		// Two lines rather than one. The runner up is what makes "this was the
+		// only move" a claim the review can actually check, and the cost is a
+		// little depth on a search that is already only judging moves rather
+		// than playing them.
+		fmt.Sprintf("setoption name MultiPV value %d", opts.MultiPV),
 	} {
 		if err := s.send(opt); err != nil {
 			return nil, err
@@ -200,7 +225,10 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		var a Analysis
+		// Keyed by MultiPV rank rather than appended, because the engine
+		// reports each rank again at every new depth and only the last report
+		// of each is its final opinion.
+		lines := map[int]Line{}
 		for {
 			line, err := s.out.ReadString('\n')
 			if err != nil {
@@ -208,11 +236,21 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 				return
 			}
 			line = strings.TrimSpace(line)
-			if cp, mate, ok := parseScore(line); ok {
-				a.CP, a.Mate = cp, mate
+			if rank, l, ok := parseLine(line); ok {
+				lines[rank] = l
 			}
 			if best, ok := strings.CutPrefix(line, "bestmove "); ok {
+				var a Analysis
 				a.Best = strings.Fields(best)[0]
+				if first, ok := lines[1]; ok {
+					a.CP, a.Mate = first.CP, first.Mate
+				}
+				// Only trust the runner up if it is a different move. A short
+				// search can report the same move twice as it re-sorts.
+				if second, ok := lines[2]; ok && second.Move != "" && second.Move != a.Best {
+					s := second
+					a.Second = &s
+				}
 				done <- result{a: a}
 				return
 			}
@@ -235,29 +273,46 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 	}
 }
 
-// parseScore pulls the evaluation out of an info line. Lines without a score,
-// such as the currmove progress reports, are ignored.
-func parseScore(line string) (cp, mate int, ok bool) {
+// parseLine pulls one candidate out of an info line: which rank it is, what it
+// scores, and the move it starts with. Lines without a score, such as the
+// currmove progress reports, are ignored.
+//
+// The rank defaults to 1 because an engine running with MultiPV 1 does not
+// print a multipv field at all.
+func parseLine(line string) (rank int, l Line, ok bool) {
 	if !strings.HasPrefix(line, "info ") || !strings.Contains(line, " score ") {
-		return 0, 0, false
+		return 0, Line{}, false
 	}
 	f := strings.Fields(line)
-	for i := 0; i+2 < len(f); i++ {
-		if f[i] != "score" {
-			continue
-		}
-		v, err := strconv.Atoi(f[i+2])
-		if err != nil {
-			return 0, 0, false
-		}
-		switch f[i+1] {
-		case "cp":
-			return v, 0, true
-		case "mate":
-			return 0, v, true
+	rank = 1
+	for i := 0; i < len(f); i++ {
+		switch {
+		case f[i] == "multipv" && i+1 < len(f):
+			if v, err := strconv.Atoi(f[i+1]); err == nil {
+				rank = v
+			}
+		case f[i] == "score" && i+2 < len(f):
+			v, err := strconv.Atoi(f[i+2])
+			if err != nil {
+				return 0, Line{}, false
+			}
+			switch f[i+1] {
+			case "cp":
+				l.CP, l.Mate = v, 0
+				ok = true
+			case "mate":
+				l.CP, l.Mate = 0, v
+				ok = true
+			}
+		case f[i] == "pv" && i+1 < len(f):
+			// The line it intends to play; only the first move matters here.
+			l.Move = f[i+1]
 		}
 	}
-	return 0, 0, false
+	if !ok {
+		return 0, Line{}, false
+	}
+	return rank, l, true
 }
 
 func (s *Stockfish) Close() error {
