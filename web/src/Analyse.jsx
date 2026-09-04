@@ -3,6 +3,8 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { useBoardWidth } from './board.js'
 import { PositionText } from './Position.jsx'
+import BoardOverlay from './BoardOverlay.jsx'
+import { CLASS, ORDER, labelOf, markOf, notable } from './judgements.js'
 
 // Reviewing a game played anywhere.
 //
@@ -10,17 +12,10 @@ import { PositionText } from './Position.jsx'
 // useful thing the site does for somebody who arrived from a link and putting
 // a signup in front of it means they never find out.
 
-// "1 blunders" is the kind of thing that makes a site look unfinished.
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
-
-const LABELS = {
-  best: 'Best',
-  excellent: 'Excellent',
-  good: 'Good',
-  inaccuracy: 'Inaccuracy',
-  mistake: 'Mistake',
-  blunder: 'Blunder',
-}
+// How the position stands for White, which is the side an evaluation bar is
+// always drawn from. The review scores every move from the mover's point of
+// view, so Black's moves have to be turned around before they can share a bar.
+const whiteChances = (m) => (m ? (m.white ? m.win_after : 100 - m.win_after) : 50)
 
 // Polling rather than a socket. A review takes a handful of seconds and then
 // never changes, so the simplest thing that works is the right thing.
@@ -130,48 +125,102 @@ export default function Analyse() {
 
       {result && (
         <>
-          <div className="analyse-scores">
-            <div>
-              <span className="analyse-side">White</span>
-              <strong>{result.white_accuracy}%</strong>
-              <span className="analyse-counts">
-                {plural(result.white.blunder, 'blunder', 'blunders')} ·{' '}
-                {plural(result.white.mistake, 'mistake', 'mistakes')} ·{' '}
-                {plural(result.white.inaccuracy, 'inaccuracy', 'inaccuracies')}
-              </span>
-            </div>
-            <div>
-              <span className="analyse-side">Black</span>
-              <strong>{result.black_accuracy}%</strong>
-              <span className="analyse-counts">
-                {plural(result.black.blunder, 'blunder', 'blunders')} ·{' '}
-                {plural(result.black.mistake, 'mistake', 'mistakes')} ·{' '}
-                {plural(result.black.inaccuracy, 'inaccuracy', 'inaccuracies')}
-              </span>
-            </div>
-          </div>
+          {/* Both sides in one table rather than two cards side by side, so
+              every row is a direct comparison: you read across to see who made
+              the mistakes rather than holding two lists in your head. Classes
+              nobody achieved are dropped, since a row of zeroes is noise. */}
+          <table className="analyse-scores">
+            <thead>
+              <tr>
+                <th />
+                <th>White</th>
+                <th>Black</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="analyse-accuracy">
+                <th scope="row">Accuracy</th>
+                <td>{result.white_accuracy}%</td>
+                <td>{result.black_accuracy}%</td>
+              </tr>
+              {ORDER.filter((k) => result.white[k] > 0 || result.black[k] > 0).map((k) => (
+                <tr key={k}>
+                  <th scope="row">
+                    <span className="j-label">
+                      <span className={`pip j-${k}`}>{CLASS[k].mark}</span>
+                      {CLASS[k].label}
+                    </span>
+                  </th>
+                  <td>{result.white[k]}</td>
+                  <td>{result.black[k]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
           <div className="analyse-body">
             <div className="analyse-board" ref={frame}>
-              {boardWidth > 0 && (
-                <Chessboard
-                  id="Analyse"
-                  boardWidth={boardWidth}
-                  position={shown ? shown.fen : 'start'}
-                  arePiecesDraggable={false}
-                  animationDuration={0}
-                  customBoardStyle={{ borderRadius: '6px' }}
-                  customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-                  customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
-                />
-              )}
+              {/* The overlay is positioned against this box rather than the
+                  column, so it has to be exactly the board and nothing else.
+                  Sized to the board, the badge lands on its square; sized to
+                  the column it floats over the text underneath. */}
+              <div
+                className="analyse-frame"
+                style={{ width: boardWidth || undefined, height: boardWidth || undefined }}
+              >
+                {boardWidth > 0 && (
+                  <Chessboard
+                    id="Analyse"
+                    boardWidth={boardWidth}
+                    position={shown ? shown.fen : 'start'}
+                    arePiecesDraggable={false}
+                    animationDuration={0}
+                    customBoardStyle={{ borderRadius: '6px' }}
+                    customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
+                    customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                  />
+                )}
+                {/* Only for the moves worth stopping at. A badge on every
+                    move turns the board into a rash. */}
+                {shown && notable(shown.judgement) && (
+                  <BoardOverlay
+                    verdict={{
+                      square: shown.uci.slice(2, 4),
+                      judgement: shown.judgement,
+                      mark: markOf(shown.judgement),
+                    }}
+                  />
+                )}
+              </div>
               <PositionText board={readable} label="Position after this move" />
-              {shown && (
+
+              {/* Who is winning, as one bar. A percentage in a sentence is a
+                  number to decode; a bar is the shape of the game. */}
+              <div
+                className="evalbar"
+                role="img"
+                aria-label={`White has ${Math.round(whiteChances(shown))}% of the chances`}
+              >
+                <div className="evalbar-white" style={{ width: `${whiteChances(shown)}%` }} />
+              </div>
+
+              {/* Stated as a change rather than narrated. "Took the chances
+                  from" only reads correctly on a move that lost something, and
+                  putting it under a move labelled Brilliant said the opposite
+                  of what the label said. The numbers are the mover's own
+                  chances, so the side is named to stop that being a guess. */}
+              {shown ? (
                 <p className="analyse-said">
-                  <span className={`tag j-${shown.judgement}`}>{LABELS[shown.judgement]}</span>{' '}
-                  {shown.san} took your chances from {shown.win_before}% to {shown.win_after}%.
+                  <span className={`tag j-${shown.judgement}`}>
+                    <span className="tag-mark">{markOf(shown.judgement)}</span>
+                    {labelOf(shown.judgement)}
+                  </span>{' '}
+                  <strong>{shown.san}</strong>. {shown.white ? 'White' : 'Black'} went from{' '}
+                  {shown.win_before}% to {shown.win_after}%.
                   {shown.better_san && <> The engine wanted {shown.better_san}.</>}
                 </p>
+              ) : (
+                <p className="analyse-said">The starting position. Pick a move to see it judged.</p>
               )}
             </div>
 
@@ -192,7 +241,8 @@ export default function Analyse() {
                       {m.white ? '.' : '...'}
                     </span>
                     <span className="analyse-san">{m.san}</span>
-                    <span className="analyse-mark">{LABELS[m.judgement]}</span>
+                    <span className={`pip j-${m.judgement}`}>{markOf(m.judgement)}</span>
+                    <span className="analyse-mark">{labelOf(m.judgement)}</span>
                   </button>
                 </li>
               ))}

@@ -4,7 +4,7 @@
 //
 // The viewBox is 8 by 8, one unit per square, so nothing here has to know the
 // board's pixel size. It scales with whatever the board is rendered at.
-export default function BoardOverlay({ orientation = 'white', glow, arrow, badge }) {
+export default function BoardOverlay({ orientation = 'white', glow, arrow, badge, verdict }) {
   const centre = (square) => {
     const file = square.charCodeAt(0) - 97
     const rank = Number(square[1])
@@ -31,7 +31,7 @@ export default function BoardOverlay({ orientation = 'white', glow, arrow, badge
     }
   }
 
-  if (!glow && !line && !badge) return null
+  if (!glow && !line && !badge && !verdict) return null
 
   return (
     <svg className="board-overlay" viewBox="0 0 8 8" aria-hidden="true">
@@ -84,6 +84,21 @@ export default function BoardOverlay({ orientation = 'white', glow, arrow, badge
           ) : (
             <path d="M-0.1 -0.1 L0.1 0.1 M0.1 -0.1 L-0.1 0.1" />
           )}
+        </g>
+      )}
+
+      {/* The review's verdict, on the square the move landed on. Coloured by
+          class and carrying the notation mark, so it reads at a glance and
+          reads the same as the move list beside it. */}
+      {verdict && (
+        <g
+          className={`verdict-badge j-${verdict.judgement}`}
+          transform={`translate(${centre(verdict.square).x + 0.32} ${centre(verdict.square).y - 0.32})`}
+        >
+          <circle r="0.3" />
+          <text textAnchor="middle" dominantBaseline="central" y="0.02">
+            {verdict.mark}
+          </text>
         </g>
       )}
     </svg>

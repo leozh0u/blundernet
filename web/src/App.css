@@ -1755,41 +1755,6 @@ button {
   font-size: 0.9rem;
 }
 
-/* The two accuracy numbers, which is what a player looks at first. */
-.analyse-scores {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
-}
-
-.analyse-scores > div {
-  flex: 1 1 14rem;
-  padding: 0.8rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.analyse-side {
-  display: block;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-faint);
-}
-
-.analyse-scores strong {
-  font-size: 1.8rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.analyse-counts {
-  display: block;
-  font-size: 0.88rem;
-  color: var(--ink-faint);
-}
-
 .analyse-body {
   display: grid;
   grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
@@ -1801,10 +1766,9 @@ button {
   width: 100%;
 }
 
-.analyse-said {
-  margin-top: 0.75rem;
-  color: var(--ink-soft);
-  font-size: 0.95rem;
+.analyse-frame {
+  position: relative;
+  margin: 0 auto;
 }
 
 .analyse-moves {
@@ -2338,6 +2302,8 @@ button {
 .worst button {
   display: flex;
   width: 100%;
+  align-items: center;
+  gap: 0.5rem;
   justify-content: space-between;
   padding: 0.35rem 0.5rem;
   border: 0;
@@ -2353,12 +2319,14 @@ button {
 }
 
 .worst .san {
+  margin-right: auto;
   font-family: var(--mono);
 }
 
 .worst .loss {
   font-family: var(--mono);
-  color: var(--danger);
+  font-size: 0.86rem;
+  color: var(--j, var(--danger));
 }
 
 /* The invite. A link you can read, select and copy, because the thing being
@@ -2836,4 +2804,185 @@ button {
 
 .room-actions {
   margin-top: 1.25rem;
+}
+
+/* ---------- how a move is judged ---------- */
+/* One palette, used by the move list, the summary table and the badge drawn on
+   the board. Greens for the moves you want, yellow through red for the ones
+   that cost you, and two colours above green that are deliberately not green:
+   brilliant and great are different in kind from merely best, and a shade of
+   the same colour would read as merely more of it. */
+:root {
+  --j-brilliant: #26c2b3;
+  --j-great: #5b8fd6;
+  --j-best: #8fbc4b;
+  --j-excellent: #8fbc4b;
+  --j-good: #a6a79f;
+  --j-inaccuracy: #f0c05a;
+  --j-mistake: #e8913c;
+  --j-blunder: #d0413b;
+}
+
+.j-brilliant { --j: var(--j-brilliant); }
+.j-great { --j: var(--j-great); }
+.j-best { --j: var(--j-best); }
+.j-excellent { --j: var(--j-excellent); }
+.j-good { --j: var(--j-good); }
+.j-inaccuracy { --j: var(--j-inaccuracy); }
+.j-mistake { --j: var(--j-mistake); }
+.j-blunder { --j: var(--j-blunder); }
+
+/* The notation mark in a coloured disc. Small on purpose: it is a legend for
+   the colour, not the thing you are meant to read. */
+.pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.2rem;
+  border-radius: 50%;
+  background: var(--j, var(--ink-faint));
+  color: #10161d;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ---------- the review page ---------- */
+.analyse-scores {
+  width: 100%;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border-collapse: collapse;
+  overflow: hidden;
+}
+
+.analyse-scores th,
+.analyse-scores td {
+  padding: 0.4rem 0.85rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The two number columns are the same width so the eye can run down them. */
+.analyse-scores td {
+  width: 5.5rem;
+}
+
+.analyse-scores thead th {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The label cell stays a table cell. Giving the th itself display:flex took
+   it out of the table's column model and every heading stopped lining up with
+   the numbers under it. The flex box goes inside instead. */
+.analyse-scores tbody th {
+  text-align: left;
+  font-weight: 400;
+}
+
+.analyse-scores tbody th span.j-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.analyse-scores tbody tr + tr th,
+.analyse-scores tbody tr + tr td {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.analyse-accuracy th,
+.analyse-accuracy td {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* Who is winning, as a bar under the board. */
+.evalbar {
+  height: 0.5rem;
+  margin-top: 0.6rem;
+  border-radius: 999px;
+  background: #2a3442;
+  overflow: hidden;
+}
+
+.evalbar-white {
+  height: 100%;
+  background: #e6ecf3;
+  transition: width 0.18s ease;
+}
+
+.analyse-said {
+  margin-top: 0.75rem;
+  font-size: 0.97rem;
+  color: var(--ink-soft);
+}
+
+.analyse-said .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.55rem 0.15rem 0.2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--j, var(--ink-faint)) 18%, transparent);
+  color: var(--j, var(--ink));
+  font-weight: 600;
+}
+
+.analyse-said .tag-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: var(--j, var(--ink-faint));
+  color: #10161d;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* A move in the list carries its colour on the left edge rather than as a
+   filled row, so eighty moves do not turn the column into a stripe chart. */
+.analyse-moves button {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  border-left: 3px solid transparent;
+}
+
+.analyse-moves button.j-brilliant,
+.analyse-moves button.j-great,
+.analyse-moves button.j-inaccuracy,
+.analyse-moves button.j-mistake,
+.analyse-moves button.j-blunder {
+  border-left-color: var(--j);
+}
+
+.analyse-moves .analyse-mark {
+  color: var(--j, var(--ink-faint));
+  font-size: 0.86rem;
+}
+
+/* The verdict drawn on the square the move landed on. */
+.verdict-badge circle {
+  fill: var(--j, var(--ink-faint));
+  stroke: #10161d;
+  stroke-width: 0.05;
+}
+
+.verdict-badge text {
+  fill: #10161d;
+  font-family: var(--sans);
+  font-size: 0.34px;
+  font-weight: 700;
 }

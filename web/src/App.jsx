@@ -13,6 +13,7 @@ import Streak from './Streak.jsx'
 import BoardOverlay from './BoardOverlay.jsx'
 import { useBlindfold } from './board.js'
 import { PositionText, BlindfoldButton } from './Position.jsx'
+import { labelOf, markOf } from './judgements.js'
 import Logo from './Logo.jsx'
 import { sound } from './sound.js'
 import Feedback from './Feedback.jsx'
@@ -779,8 +780,9 @@ export default function App() {
                 ) : review.worst?.length ? (
                   <ul className="worst">
                     {review.worst.map((m) => (
-                      <li key={m.ply}>
+                      <li key={m.ply} className={`j-${m.judgement}`}>
                         <button onClick={() => setState((st) => ({ ...st, fen: m.fen }))}>
+                          <span className={`pip j-${m.judgement}`}>{markOf(m.judgement)}</span>
                           <span className="san">
                             {Math.ceil(m.ply / 2)}. {m.san}
                           </span>
@@ -791,7 +793,7 @@ export default function App() {
                               moved to Stockfish, so this read undefined and
                               threw on .toFixed. */}
                           <span className="loss">
-                            {m.judgement}, {Math.round(m.win_before - m.win_after)}%
+                            {labelOf(m.judgement)}, {Math.round(m.win_before - m.win_after)}% lost
                           </span>
                         </button>
                       </li>
