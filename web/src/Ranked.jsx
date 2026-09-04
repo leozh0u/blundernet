@@ -275,7 +275,7 @@ export default function Ranked() {
           {phase === 'solving' && puzzle && (
             <>
               <span className="head">
-                {puzzle.color === 'white' ? 'White' : 'Black'} to play
+                Your move as {puzzle.color === 'white' ? 'White' : 'Black'}
               </span>
               {/* No solution length here on purpose. Knowing it is two moves
                   tells you when to stop calculating, and ranked is meant to

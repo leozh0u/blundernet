@@ -801,10 +801,15 @@ export default function Puzzles({ shared }) {
             <div className={`state ${phase === 'failed' ? 'wrong' : 'yours'}`}>
               {phase === 'loading' && <span className="head">Finding a puzzle</span>}
               {phase === 'setup' && <span className="head">Watch the blunder</span>}
+              {/* "Your move as White" rather than "White to play". The line
+                  above it talks to you, and following an instruction with a
+                  spectator's caption about the board reads as two different
+                  people writing. In a puzzle you are that colour, so the
+                  useful part is whose turn it is and which side you have. */}
               {phase === 'solving' && (
                 <>
                   <span className="head">
-                    {puzzle.color === 'white' ? 'White' : 'Black'} to play
+                    Your move as {puzzle.color === 'white' ? 'White' : 'Black'}
                   </span>
                   {hint && <span className="hint">{hint.text}</span>}
                 </>

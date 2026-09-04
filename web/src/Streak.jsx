@@ -247,7 +247,7 @@ export default function Streak() {
           {phase === 'setup' && <span className="head">Watch the blunder</span>}
           {phase === 'solving' && puzzle && (
             <span className="head">
-              {puzzle.color === 'white' ? 'White' : 'Black'} to play
+              Your move as {puzzle.color === 'white' ? 'White' : 'Black'}
             </span>
           )}
           {phase === 'over' && <span className="head">Run over</span>}
