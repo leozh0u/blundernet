@@ -29,7 +29,7 @@ export default function About() {
         Filter by rating, how many moves the answer is, the phase of the game,
         the tactic, or the opening it came from, then drill. Hints go in three
         steps: the piece lights up, then an arrow shows where it goes, then it
-        plays the move. Puzzles you get wrong go on a list you can come back
+        plays the move. Puzzles you miss go on a list you can come back
         to, and every puzzle links to the real game it was taken from.
       </p>
       <p>

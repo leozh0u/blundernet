@@ -618,7 +618,7 @@ export default function Puzzles({ shared }) {
               className={`chip ${source === 'wrong' ? 'on' : ''}`}
               onClick={() => setSource('wrong')}
             >
-              Ones I got wrong
+              Missed
             </button>
             <button
               className={`chip ${source === 'saved' ? 'on' : ''}`}
@@ -722,7 +722,7 @@ export default function Puzzles({ shared }) {
       {source !== 'search' && list.length > 0 && (
         <section className="saved-list">
           <div className="saved-head">
-            <h2>{source === 'saved' ? 'Saved puzzles' : 'Ones you got wrong'}</h2>
+            <h2>{source === 'saved' ? 'Saved puzzles' : 'Missed puzzles'}</h2>
             <span className="saved-count">
               {list.length === 1 ? '1 puzzle' : `${list.length} puzzles`}
             </span>
@@ -764,7 +764,7 @@ export default function Puzzles({ shared }) {
               (source === 'search'
                 ? 'No puzzle has all of those at once. Widen the rating, or drop the theme.'
                 : source === 'wrong'
-                  ? 'Puzzles you get wrong land here, and leave once you get them right.'
+                  ? 'Puzzles you miss land here, and leave once you get them right.'
                   : 'Save a puzzle with the star and it waits here for you.')}
           </p>
         </section>

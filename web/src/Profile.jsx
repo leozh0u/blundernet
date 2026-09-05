@@ -132,7 +132,7 @@ export default function Profile({ onDrill }) {
               Drill saved
             </button>
             <button className="ghost wide" onClick={() => onDrill('wrong')}>
-              Drill the ones I got wrong
+              Drill missed
             </button>
           </div>
         </div>
