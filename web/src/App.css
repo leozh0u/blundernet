@@ -2986,3 +2986,45 @@ button {
   font-size: 0.34px;
   font-weight: 700;
 }
+
+/* ---------- the demonstration board ---------- */
+/* What the coach is showing, which is the thing a lesson is built around. It
+   gets the same weight as the board a coach is editing, because for a student
+   it is the same board. */
+.live-board {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.live-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.live-board h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Said quietly. A socket dropping and coming back is ordinary on a laptop that
+   sleeps, and it should not look like the lesson broke. */
+.live-dropped {
+  font-size: 0.88rem;
+  color: var(--ink-faint);
+}
+
+.live-caption {
+  margin: 0 0 0.6rem;
+  color: var(--ink-soft);
+}
+
+.live-frame {
+  width: 100%;
+  max-width: 28rem;
+}

@@ -83,7 +83,7 @@ function fromFEN(fen) {
   return { position, turn: fields[1] === 'b' ? 'b' : 'w' }
 }
 
-export default function CoachBoard({ onAsk }) {
+export default function CoachBoard({ onAsk, classroomID }) {
   const [frame, width] = useBoardWidth()
   const [position, setPosition] = useState(START)
   const [turn, setTurn] = useState('w')
@@ -98,6 +98,29 @@ export default function CoachBoard({ onAsk }) {
   const [asking, setAsking] = useState(false)
 
   const current = toFEN(position, turn)
+
+  // Everything the coach does goes out to the room.
+  //
+  // A lesson is watched, not requested: the class should see the bishop move
+  // as it moves, so this pushes on every change rather than on a "show class"
+  // button. Debounced, because dragging a piece fires several times and the
+  // room only needs where it landed.
+  //
+  // Fire and forget. A dropped update is replaced by the next one a moment
+  // later, and an error box over a coach's board mid lesson would be worse
+  // than the missed frame.
+  useEffect(() => {
+    if (!classroomID) return
+    const id = setTimeout(() => {
+      fetch(`/api/classrooms/${classroomID}/board`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fen: current, orientation, live: true }),
+      }).catch(() => {})
+    }, 120)
+    return () => clearTimeout(id)
+  }, [classroomID, current, orientation])
 
   useEffect(() => {
     fetch('/api/puzzles/openings')
@@ -250,10 +273,6 @@ export default function CoachBoard({ onAsk }) {
 
         <aside className="coachboard-side">
           <h3>Set up a position</h3>
-          <p className="coachboard-help">
-            Drag anything anywhere. Off the board removes it. The trays never
-            run out.
-          </p>
 
           {/* Putting the position in front of the class is the point of
               setting it up, so it sits at the top of the panel rather than

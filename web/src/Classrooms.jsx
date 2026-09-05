@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { auth } from './auth.js'
 import CoachBoard from './CoachBoard.jsx'
 import ClassQuestion from './ClassQuestion.jsx'
+import ClassLiveBoard from './ClassLiveBoard.jsx'
 import Assignments from './Assignments.jsx'
 
 // Classrooms. A coach opens a room and reads out a code; the class joins with
@@ -271,9 +272,10 @@ export default function Classrooms({ roomID, onOpen }) {
             ))}
           </tbody>
         </table>
-        {!coach && (
-          <p className="rooms-note">Your coach can see your puzzle work. Nobody else can.</p>
-        )}
+        {/* The lesson itself. A student watches the coach's board the whole
+            time, and a question is something that happens on top of that
+            rather than the only time a position appears. */}
+        {!coach && <ClassLiveBoard classroomID={room.id} />}
 
         <ClassQuestion classroomID={room.id} role={room.role} refreshKey={askedAt} />
 
@@ -282,6 +284,7 @@ export default function Classrooms({ roomID, onOpen }) {
         {coach && (
           <div className="room-board">
             <CoachBoard
+              classroomID={room.id}
               onAsk={async (fen, prompt) => {
                 await api.call('POST', `/api/classrooms/${room.id}/questions`, { fen, prompt })
                 setAskedAt((n) => n + 1)
