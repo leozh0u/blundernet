@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -23,13 +24,32 @@ func TestShowStoresAndPublishes(t *testing.T) {
 	want := Board{FEN: "8/8/8/4k3/8/4K3/8/8 w - - 0 1", Orientation: "black", Live: true}
 
 	watching := b.Watch(ctx, room)
-	// The subscription is set up on a goroutine, so give it the chance to be
-	// listening before anything is published to it.
-	mr.Publish(boardChannel(room), "warmup")
-	<-watching
 
-	if err := b.Show(ctx, room, want); err != nil {
-		t.Fatal(err)
+	// Publish on a loop until the watcher hears one, rather than publishing
+	// once and waiting.
+	//
+	// Watch subscribes on a goroutine, so there is a window where the channel
+	// exists and Redis has not registered the subscriber yet. A single publish
+	// into that window is dropped, and the first version of this test then sat
+	// on a bare receive until the whole package hit the ten minute timeout. It
+	// passed on a fast laptop and deadlocked on CI, which is the worst way for
+	// a test to be wrong.
+	deadline := time.After(10 * time.Second)
+	var heard []byte
+	for heard == nil {
+		if err := b.Show(ctx, room, want); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case raw := <-watching:
+			heard = raw
+		case <-time.After(25 * time.Millisecond):
+		case <-deadline:
+			t.Fatal("nothing reached a watcher, so nobody in the room would see the board")
+		}
+	}
+	if len(heard) == 0 {
+		t.Error("published an empty board")
 	}
 
 	got, err := b.Current(ctx, room)
@@ -38,15 +58,6 @@ func TestShowStoresAndPublishes(t *testing.T) {
 	}
 	if got.FEN != want.FEN || got.Orientation != want.Orientation || !got.Live {
 		t.Errorf("stored %+v, want %+v", got, want)
-	}
-
-	select {
-	case raw := <-watching:
-		if len(raw) == 0 {
-			t.Error("published an empty board")
-		}
-	default:
-		t.Error("nothing was published, so nobody watching would have seen the change")
 	}
 }
 
