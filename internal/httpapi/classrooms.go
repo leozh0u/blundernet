@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 
 	"github.com/leozh0u/blundernet/internal/store"
 )
@@ -476,4 +478,145 @@ func (s *Server) handleAssignmentDrop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// The live demonstration board.
+//
+// A coach shows a position and the class watches it change. Everything below
+// is about that being live rather than a request away: the coach's changes are
+// published, and every student holds a socket open to receive them.
+
+type boardBody struct {
+	FEN         string `json:"fen"`
+	Orientation string `json:"orientation"`
+	Caption     string `json:"caption"`
+	Live        bool   `json:"live"`
+}
+
+// handleBoardShow takes what the coach is showing and broadcasts it.
+//
+// Coach only, checked on the server. The browser already hides the editor from
+// students, and that is a convenience rather than a control: anyone can post
+// to this URL, so the room's own record of who is the coach decides.
+func (s *Server) handleBoardShow(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAccount(w, r)
+	if user == nil {
+		return
+	}
+	id, ok := pathUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	if s.board == nil {
+		httpError(w, http.StatusServiceUnavailable, "the live board is not configured")
+		return
+	}
+	role, err := s.classrooms.Role(r.Context(), id, user.ID)
+	if err != nil {
+		classroomError(w, err)
+		return
+	}
+	if role != "coach" {
+		// 404 rather than 403, the same as everywhere else here: a student
+		// probing this should not learn that the room exists and they are
+		// merely the wrong role.
+		httpError(w, http.StatusNotFound, "classroom not found")
+		return
+	}
+	var body boardBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "body must be a board")
+		return
+	}
+	if len(body.FEN) > 120 {
+		httpError(w, http.StatusBadRequest, "that is not a position")
+		return
+	}
+	if body.Orientation != "black" {
+		body.Orientation = "white"
+	}
+	if len(body.Caption) > 200 {
+		body.Caption = body.Caption[:200]
+	}
+	if err := s.board.Show(r.Context(), id, store.Board{
+		FEN: body.FEN, Orientation: body.Orientation, Caption: body.Caption, Live: body.Live,
+	}); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleBoardWatch is the student's end: the board now, then every change to
+// it, over one socket.
+func (s *Server) handleBoardWatch(w http.ResponseWriter, r *http.Request) {
+	user := UserFrom(r.Context())
+	if user == nil || user.IsGuest {
+		httpError(w, http.StatusUnauthorized, "sign in to watch")
+		return
+	}
+	id := r.PathValue("id")
+	if s.board == nil || s.classrooms == nil {
+		httpError(w, http.StatusServiceUnavailable, "the live board is not configured")
+		return
+	}
+	// Membership is checked before the upgrade, so a stranger is refused with
+	// an ordinary status code rather than being handed a socket that then goes
+	// quiet on them.
+	if _, err := s.classrooms.Role(r.Context(), id, user.ID); err != nil {
+		classroomError(w, err)
+		return
+	}
+
+	upgrader := websocket.Upgrader{CheckOrigin: s.sameOrigin}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	events := s.board.Watch(ctx, id)
+
+	// Reader exists only to notice the student closing the tab.
+	go func() {
+		defer cancel()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	// The board as it stands, so somebody arriving in the middle of a lesson
+	// sees what everyone else is looking at rather than waiting for the coach
+	// to touch a piece.
+	if current, err := s.board.Current(ctx, id); err == nil {
+		if raw, err := json.Marshal(current); err == nil {
+			if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+				return
+			}
+		}
+	}
+
+	ping := time.NewTicker(30 * time.Second)
+	defer ping.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ping.C:
+			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+				return
+			}
+		case raw, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+				return
+			}
+		}
+	}
 }

@@ -68,6 +68,7 @@ type Server struct {
 	ranked        *store.Ranked
 	feedback      *store.Feedback
 	classrooms    *store.Classrooms
+	board         *store.ClassBoard
 	imports       *store.Imports
 	streak        *store.Streak
 	sessions      *store.Sessions
@@ -108,6 +109,7 @@ func New(d Deps) *Server {
 		s.seen = store.NewSeen(d.Redis)
 		s.ranked = store.NewRanked(d.Redis)
 		s.streak = store.NewStreak(d.Redis)
+		s.board = store.NewClassBoard(d.Redis)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -155,6 +157,9 @@ func New(d Deps) *Server {
 	mux.HandleFunc("DELETE /api/classrooms/{id}", s.handleClassroomDelete)
 	mux.HandleFunc("POST /api/classrooms/{id}/questions", s.limit("attempt", s.limits.Move, s.handleQuestionAsk))
 	mux.HandleFunc("GET /api/classrooms/{id}/questions/open", s.handleQuestionOpen)
+	// The demonstration board: the coach shows, everyone else watches.
+	mux.HandleFunc("PUT /api/classrooms/{id}/board", s.limit("attempt", s.limits.Move, s.handleBoardShow))
+	mux.HandleFunc("GET /api/classrooms/{id}/board/ws", s.handleBoardWatch)
 	mux.HandleFunc("POST /api/classrooms/{id}/questions/{question}/answer", s.limit("attempt", s.limits.Move, s.handleQuestionAnswer))
 	mux.HandleFunc("POST /api/classrooms/{id}/questions/{question}/close", s.limit("attempt", s.limits.Move, s.handleQuestionClose))
 	mux.HandleFunc("GET /api/classrooms/{id}/assignments", s.handleAssignmentList)
