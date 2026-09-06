@@ -16,13 +16,19 @@ The engine repo answers "can I train a model?" This repo answers a different que
 
 **Puzzles.** Filter by rating, solution length, game phase, theme and opening, then drill. Hints glow the piece, then draw an arrow, then play the move. Wrong answers go on a list you can drill again later, and there is a "another like this" link that is just the filter set as a URL.
 
+**Saved, and what to work on.** A puzzle can be starred, and the saved list opened and cleared. Separately a panel names what you are worse at than the rest of your own play, and only that. Ranking every theme would look impressive and be mostly noise, as with forty puzzles behind you most of that ordering is luck, so the server decides what can honestly be said and the panel says nothing when there is nothing to say.
+
 **Ranked puzzles.** The solution stays on the server. Both you and the puzzle carry a Glicko-2 rating, and a miss costs more the higher you climb: 1x at 1200, rising to 2.5x. Needs an account, which is the honest consequence of a rating meaning anything.
 
 **Streak.** Puzzles climb 40 rating points per solve. One miss ends the run.
 
 **Play the engine.** Six levels off one model. In learning games the bot adapts to you mid-game; in rated and friend games it never does.
 
-**Play a friend** over a link, unrated. **Post-game review** flags the worst moves using the value head plus material.
+**Play a friend** over a link, unrated.
+
+**Review.** Every move is judged on how much it changed your chances of winning rather than on how many centipawns it cost, as +9 to +6 is three hundred centipawns and means nothing while +0.2 to -0.8 is a hundred and is the whole game. The conversion is Lichess's, published and derived from real games. Eight verdicts, brilliant down to blunder. Brilliant is a sacrifice that works: three pawns or more given up, counted after the opponent's best reply so an ordinary trade nets to nothing, with the engine agreeing anyway and the position not lost afterwards. Great is the only move that held, where everything else on the board drops at least twenty points of win percentage, which is the mistake threshold, so the claim is exact. Ten was tried first and handed out six of these in one game.
+
+It reads a game pasted from anywhere, which is what makes it a tool rather than a feature of this site: the game a coach wants to go through with a student is almost never one played here.
 
 **Classroom.** A coach starts a session, reads out a six character code, and whoever joins keeps their own account and their own progress. The coach gets a board with the rules switched off, the way a demo board works: any piece to any square legal or not, spare pieces in trays that never run out, drag one off the board to remove it. That position can go in front of the class as a question, and everyone answers by playing a move. The answers come back gathered by move with a count, because four people playing the same losing capture is a lesson and one person playing it is a typo. Homework is a theme, a rating window and a number; progress is counted from the attempts already recorded rather than a counter that can drift out of step.
 
