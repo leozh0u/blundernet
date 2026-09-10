@@ -28,6 +28,17 @@ const (
 	DefaultLevel = 3
 )
 
+// LevelHard routes the move to Stockfish instead of the network.
+//
+// It sits above MaxLevel rather than replacing the ladder: rated play still
+// climbs 1 to 6 against the trained model, and stored bot_level rows stay
+// meaningful. This is the setting a learning game can ask for when the
+// network is not a real game for them.
+const LevelHard = 7
+
+// IsHard reports whether a level means Stockfish rather than the network.
+func IsHard(level int) bool { return level == LevelHard }
+
 var levels = map[int]Level{
 	1: {Sims: 8, Temp: 1.6},
 	2: {Sims: 25, Temp: 1.1},

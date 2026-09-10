@@ -84,6 +84,20 @@ func main() {
 		analyser = sf
 	}
 
+	// A second Stockfish, for playing rather than judging. Separate process on
+	// purpose: a review is up to twenty seconds and a move has three, so one
+	// shared engine would put every hard game behind somebody's pasted game.
+	var hard engine.Engine
+	if sfPlay, err := engine.NewStockfishPlayer(engine.StockfishOptions{
+		Path:     envOr("STOCKFISH_PATH", "stockfish"),
+		MoveTime: envDuration("STOCKFISH_PLAY_MOVETIME", 300*time.Millisecond),
+	}); err != nil {
+		slog.Warn("no hard opponent, falling back to the network", "err", err)
+	} else {
+		defer sfPlay.Close()
+		hard = sfPlay
+	}
+
 	// Engine timings are measured here but published by the api, so they go
 	// through Redis. HOSTNAME is the task or container id on ECS and compose.
 	go store.PublishEngineReports(ctx, games, envOr("HOSTNAME", "worker"), eng.Name(), 15*time.Second)
@@ -95,6 +109,7 @@ func main() {
 		Imports:  store.NewImports(archive.Pool()),
 		Jobs:     jobs,
 		Engine:   eng,
+		Hard:     hard,
 	}
 	w.Run(ctx)
 	slog.Info("worker stopped")

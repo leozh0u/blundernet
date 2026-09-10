@@ -24,6 +24,9 @@ type Worker struct {
 	Archive *store.Archive
 	Jobs    *queue.Client
 	Engine  engine.Engine
+	// Hard is the opponent for a game asking for engine.LevelHard. Nil falls
+	// back to the network, so a worker without Stockfish still plays.
+	Hard engine.Engine
 	// Analyser reviews finished games. Separate from Engine on purpose: the
 	// engine plays you and the analyser tells you the truth about what you
 	// played, and those want opposite qualities. Nil disables reviews rather
@@ -145,6 +148,11 @@ func (w *Worker) hintMove(g *game.Game) (string, error) {
 // strength when it cannot. The material fallback has one setting, and the
 // stack has to keep working without the model.
 func (w *Worker) bestMove(g *game.Game) (string, error) {
+	// The hard side is a different engine, not a higher rung, so it is chosen
+	// before the ladder is consulted at all.
+	if engine.IsHard(g.Level) && w.Hard != nil {
+		return w.Hard.BestMove(g.FEN())
+	}
 	leveled, ok := w.Engine.(engine.Leveled)
 	if !ok || g.Level <= 0 {
 		return w.Engine.BestMove(g.FEN())
@@ -164,6 +172,11 @@ func (w *Worker) bestMove(g *game.Game) (string, error) {
 // measure it.
 func (w *Worker) levelFor(g *game.Game) int {
 	if g.Rated || g.Friend {
+		return g.Level
+	}
+	// Nothing to ease off: hard is a fixed opponent by definition, and
+	// adapting it would clamp it back onto the network's ladder.
+	if engine.IsHard(g.Level) {
 		return g.Level
 	}
 	scorer, ok := w.Engine.(engine.Scorer)

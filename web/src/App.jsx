@@ -242,7 +242,7 @@ export default function App() {
   // Learning or rated, and the level the learning game is played at. Rated
   // games take the level from the ladder, so the picker is hidden there.
   const [mode, setMode] = useState('rated')
-  const [level, setLevel] = useState(3)
+  const [level, setLevel] = useState(2)
   const [ladder, setLadder] = useState(null)
   const [recent, setRecent] = useState([])
   const [mine, setMine] = useState(null)
@@ -601,15 +601,23 @@ export default function App() {
             <div className="levels">
               <span className="filter-label">Level</span>
               {mode === 'learning' ? (
+                /* Two opponents, not six rungs. Easy is the network I
+                   trained, which plays about 1000 and is a real game for a
+                   beginner. Hard is Stockfish, because past that the network
+                   is not a game for anyone who can already play. */
                 <div className="chips">
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                  {[
+                    { n: 2, label: 'Easy', hint: 'the engine I trained' },
+                    { n: 7, label: 'Hard', hint: 'Stockfish' },
+                  ].map((o) => (
                     <button
-                      key={n}
-                      className={`chip ${level === n ? 'on' : ''}`}
-                      onClick={() => setLevel(n)}
-                      aria-pressed={level === n}
+                      key={o.n}
+                      className={`chip ${level === o.n ? 'on' : ''}`}
+                      onClick={() => setLevel(o.n)}
+                      aria-pressed={level === o.n}
+                      title={o.hint}
                     >
-                      {n}
+                      {o.label}
                     </button>
                   ))}
                 </div>
