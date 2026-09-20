@@ -25,6 +25,12 @@ type StockfishPlayer struct {
 // NewStockfishPlayer starts an engine for playing. MoveTime is the strength
 // knob: search is what makes it good, so time is the honest dial.
 func NewStockfishPlayer(opts StockfishOptions) (*StockfishPlayer, error) {
+	// One line, not the review's two. MultiPV is how the review asks "was
+	// there another way", and a player never needs the answer: the runner up
+	// is search spent on a move it will not play, which at a fixed move time
+	// comes straight out of depth. Set here rather than left to the default,
+	// because the default belongs to the review.
+	opts.MultiPV = 1
 	sf, err := NewStockfish(opts)
 	if err != nil {
 		return nil, err

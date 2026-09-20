@@ -144,3 +144,36 @@ func TestMultiPVReportsARunnerUp(t *testing.T) {
 		t.Errorf("a forced mate reported cp %d, mate %d", m.CP, m.Mate)
 	}
 }
+
+// The hard opponent, which shipped with no test of its own.
+//
+// Worth one: it is the only path where Stockfish picks a move somebody plays
+// against, and the failure mode is quiet. A broken player returns an error the
+// worker swallows by falling back to the network, so "Hard" would silently be
+// the 1000 rated net under a different label.
+func TestStockfishPlayerPicksAMove(t *testing.T) {
+	if _, err := exec.LookPath("stockfish"); err != nil {
+		t.Skip("stockfish is not installed")
+	}
+	p, err := NewStockfishPlayer(StockfishOptions{MoveTime: 200 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	// A position with one move that matters: White is a queen up and mate is
+	// on. An engine that is actually searching finds it.
+	move, err := p.BestMove("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if move != "a1a8" {
+		t.Errorf("played %q in a mate in one, want a1a8", move)
+	}
+
+	// A finished position has no move, and the caller has to be told rather
+	// than handed an empty string that looks like a move.
+	if _, err := p.BestMove("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"); err == nil {
+		t.Error("returned a move for a position that is already mate")
+	}
+}
