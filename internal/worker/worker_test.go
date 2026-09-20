@@ -318,3 +318,40 @@ func TestHardFallsBackWhenThereIsNoHardEngine(t *testing.T) {
 		t.Errorf("with no hard engine the network answered %d times, want 1", net.calls)
 	}
 }
+
+// A worker whose queue disappears used to poll it forever. One did exactly
+// that on a laptop for fifteen hours, at a pegged core, after the ElasticMQ
+// container it was talking to went away.
+func TestWorkerStopsWhenTheQueueIsGone(t *testing.T) {
+	t.Setenv("SQS_QUEUE_URL", "http://127.0.0.1:9/000000000000/moves")
+	t.Setenv("SQS_ENDPOINT", "http://127.0.0.1:9")
+	jobs, err := queue.New(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func(g, lo, hi time.Duration) { giveUpAfter, backoffMin, backoffMax = g, lo, hi }(giveUpAfter, backoffMin, backoffMax)
+	giveUpAfter, backoffMin, backoffMax = 300*time.Millisecond, 10*time.Millisecond, 20*time.Millisecond
+
+	w, _, _ := setup(t)
+	w.Jobs = jobs
+
+	// Generous, because a refused connection still costs the SDK its own
+	// retries. The point is that Run returns at all.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		w.Run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if ctx.Err() != nil {
+			t.Fatal("worker only stopped because the context expired")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("worker kept polling a queue that was never coming back")
+	}
+}

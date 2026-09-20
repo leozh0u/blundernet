@@ -57,14 +57,33 @@ func (w *Worker) Run(ctx context.Context) {
 	defer close(reviews)
 	go w.runReviews(ctx, reviews)
 
+	backoff, lastReceive := time.Duration(0), time.Now()
 	for ctx.Err() == nil {
 		msgs, err := w.Jobs.Receive(ctx, 5)
 		if err != nil {
-			if ctx.Err() == nil {
-				slog.Error("receive", "err", err)
+			if ctx.Err() != nil {
+				return
+			}
+			// A worker that cannot reach its queue has nothing to do, so it
+			// stops rather than retrying forever. On ECS the task restarts and
+			// picks up when the queue is back; run by hand, it exits instead
+			// of sitting on the machine for the rest of the day.
+			if down := time.Since(lastReceive); down >= giveUpAfter {
+				slog.Error("queue unreachable, stopping", "for", down.Round(time.Second), "err", err)
+				return
+			}
+			// Backing off matters more than it looks. The SDK stops retrying
+			// once its retry quota is spent, after which every call fails the
+			// moment it is made, and an unpaced retry here turns that into a
+			// loop that burns a core for as long as the process lives.
+			backoff = nextBackoff(backoff)
+			slog.Error("receive", "err", err, "retry_in", backoff)
+			if !sleep(ctx, backoff) {
+				return
 			}
 			continue
 		}
+		backoff, lastReceive = 0, time.Now()
 		for _, m := range msgs {
 			if m.Job.Kind == queue.KindReview || m.Job.Kind == queue.KindImport {
 				select {
@@ -86,6 +105,37 @@ func (w *Worker) Run(ctx context.Context) {
 				slog.Error("ack", "game", m.Job.GameID, "err", err)
 			}
 		}
+	}
+}
+
+// How long the queue may stay unreachable before the worker gives up, and the
+// bounds on retrying while it waits. Variables rather than constants so the
+// test can watch a worker give up without waiting five minutes for it.
+var (
+	giveUpAfter = 5 * time.Minute
+	backoffMin  = time.Second
+	backoffMax  = 30 * time.Second
+)
+
+func nextBackoff(d time.Duration) time.Duration {
+	if d == 0 {
+		return backoffMin
+	}
+	if d *= 2; d > backoffMax {
+		return backoffMax
+	}
+	return d
+}
+
+// sleep waits out the backoff, reporting false if the context ended first.
+func sleep(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
 	}
 }
 
