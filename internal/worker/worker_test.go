@@ -249,3 +249,72 @@ func TestLevelForAdaptsOnlyInLearningGames(t *testing.T) {
 		t.Errorf("a friend game adapted to level %d, want 3", got)
 	}
 }
+
+// The hard side has to actually be the hard side.
+//
+// Its failure mode is silent: if Hard is nil or the routing is wrong, the
+// worker falls back to the network and a game the player chose "Hard" for is
+// answered by the 1000 rated model under a different label. Nothing errors and
+// nothing looks wrong, so this is the only place that failure gets caught.
+func TestHardGamesGoToTheHardEngine(t *testing.T) {
+	w, games, net := setup(t)
+	hard := &scriptedEngine{moves: []string{"c7c5"}}
+	w.Hard = hard
+
+	ctx := context.Background()
+	play := func(id string, level int) {
+		g := game.New(id, "white", level, false)
+		if err := games.Create(ctx, g); err != nil {
+			t.Fatal(err)
+		}
+		if err := g.ApplyMove("white", "e2e4"); err != nil {
+			t.Fatal(err)
+		}
+		if err := games.Update(ctx, g, 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Process(ctx, queue.Job{GameID: id, Ply: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	play("g-hard", engine.LevelHard)
+	if hard.calls != 1 {
+		t.Errorf("a hard game asked the hard engine %d times, want 1", hard.calls)
+	}
+	if net.calls != 0 {
+		t.Errorf("a hard game fell through to the network %d times", net.calls)
+	}
+
+	play("g-easy", 2)
+	if net.calls != 1 {
+		t.Errorf("an easy game asked the network %d times, want 1", net.calls)
+	}
+	if hard.calls != 1 {
+		t.Errorf("an easy game reached the hard engine, calls now %d", hard.calls)
+	}
+}
+
+// Without Stockfish the worker still has to play, rather than dropping the job.
+func TestHardFallsBackWhenThereIsNoHardEngine(t *testing.T) {
+	w, games, net := setup(t)
+	w.Hard = nil
+
+	ctx := context.Background()
+	g := game.New("g-fallback", "white", engine.LevelHard, false)
+	if err := games.Create(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.ApplyMove("white", "e2e4"); err != nil {
+		t.Fatal(err)
+	}
+	if err := games.Update(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Process(ctx, queue.Job{GameID: "g-fallback", Ply: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if net.calls != 1 {
+		t.Errorf("with no hard engine the network answered %d times, want 1", net.calls)
+	}
+}
