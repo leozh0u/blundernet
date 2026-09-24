@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import { sound } from './sound.js'
-import { useBoardMotion, useBoardWidth, useBlindfold } from './board.js'
-import { PositionText, BlindfoldButton } from './Position.jsx'
-import { auth } from './auth.js'
-import GuestNote from './GuestNote.jsx'
-import BoardOverlay from './BoardOverlay.jsx'
+import { sound } from '../../lib/sound.js'
+import { useBoardMotion, useBoardWidth, useBlindfold } from '../../lib/board.js'
+import { PositionText, BlindfoldButton } from '../../components/Position.jsx'
+import { auth } from '../account/auth.js'
+import GuestNote from '../../components/GuestNote.jsx'
+import BoardOverlay from '../../components/BoardOverlay.jsx'
 
 // Streak. Puzzles get harder until you miss one, and then the run is over.
 // No hints, no second try, no rating: the only thing kept is the best run.

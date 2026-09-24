@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import { sound } from './sound.js'
+import { sound } from '../../lib/sound.js'
 import { buildLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
-import { useBoardMotion, useBoardWidth, useBlindfold } from './board.js'
-import { PositionText, BlindfoldButton } from './Position.jsx'
-import BoardOverlay from './BoardOverlay.jsx'
+import { useBoardMotion, useBoardWidth, useBlindfold } from '../../lib/board.js'
+import { PositionText, BlindfoldButton } from '../../components/Position.jsx'
+import BoardOverlay from '../../components/BoardOverlay.jsx'
 
 // Ranked mode. One puzzle at your level, no filters, no hints, no second try,
 // and the rating moves both ways.

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import BoardOverlay from './BoardOverlay.jsx'
-import { sound } from './sound.js'
+import BoardOverlay from '../../components/BoardOverlay.jsx'
+import { sound } from '../../lib/sound.js'
 import { puzzleLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
-import { useBoardMotion, useBoardWidth, useBlindfold } from './board.js'
-import { PositionText, Announce, BlindfoldButton } from './Position.jsx'
+import { useBoardMotion, useBoardWidth, useBlindfold } from '../../lib/board.js'
+import { PositionText, Announce, BlindfoldButton } from '../../components/Position.jsx'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so

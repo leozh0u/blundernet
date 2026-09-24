@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Chessboard, ChessboardDnDProvider, SparePiece } from 'react-chessboard'
-import { useBoardWidth } from './board.js'
-import BoardOverlay from './BoardOverlay.jsx'
+import { useBoardWidth } from '../../lib/board.js'
+import BoardOverlay from '../../components/BoardOverlay.jsx'
 
 // A board with the rules switched off, for a coach setting a position up in
 // front of a class.

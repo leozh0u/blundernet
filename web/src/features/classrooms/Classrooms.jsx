@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { auth } from './auth.js'
+import { auth } from '../account/auth.js'
 import CoachBoard from './CoachBoard.jsx'
 import ClassQuestion from './ClassQuestion.jsx'
 import ClassLiveBoard from './ClassLiveBoard.jsx'

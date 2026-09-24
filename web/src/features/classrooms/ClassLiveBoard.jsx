@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import { useBoardWidth } from './board.js'
-import { PositionText } from './Position.jsx'
+import { useBoardWidth } from '../../lib/board.js'
+import { PositionText } from '../../components/Position.jsx'
 
 // What the coach is showing, right now.
 //

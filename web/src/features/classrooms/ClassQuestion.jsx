@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import { useBoardWidth } from './board.js'
-import { PositionText } from './Position.jsx'
+import { useBoardWidth } from '../../lib/board.js'
+import { PositionText } from '../../components/Position.jsx'
 
 // The question a class is currently on.
 //

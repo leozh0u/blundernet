@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
-import { useBoardWidth } from './board.js'
-import { PositionText } from './Position.jsx'
-import BoardOverlay from './BoardOverlay.jsx'
+import { useBoardWidth } from '../../lib/board.js'
+import { PositionText } from '../../components/Position.jsx'
+import BoardOverlay from '../../components/BoardOverlay.jsx'
 import { CLASS, ORDER, labelOf, markOf, notable } from './judgements.js'
 
 // Reviewing a game played anywhere.
