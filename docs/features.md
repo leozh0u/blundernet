@@ -10,7 +10,7 @@
 
 **Streak.** Puzzles climb 40 rating points per solve. One miss ends the run.
 
-**Play the engine.** Six levels off one model. In learning games the bot adapts to you mid-game; in rated and friend games it never does.
+**Play a bot.** Two opponents in learning games: Easy is the engine I trained, which plays about 1000 and is a real game for a beginner, and Hard is Stockfish. Rated games take their level from a ladder instead.
 
 **Play a friend** over a link, unrated.
 

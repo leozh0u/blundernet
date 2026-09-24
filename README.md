@@ -2,15 +2,17 @@
 
 [![ci](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml/badge.svg)](https://github.com/leozh0u/blundernet/actions/workflows/ci.yml)
 
-A chess site with two halves: **3,253,092 puzzles you can actually filter**, and games against [the BlunderNet engine](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch.
+A free chess training site, live at **https://blundernet.com** with about 120 users.
 
-Live at **https://blundernet.com**.
+The centre of it is **3,253,092 puzzles you can filter by rating, theme, opening, phase and solution length at once**. There is also a classroom mode, where a coach pushes a position to the room and the answers come back grouped by move, and a review that judges every move by the winning chances it gave away, on a game played here or pasted in from any site. You can play [the BlunderNet engine](https://github.com/leozh0u/blundernet-engine), a neural network I trained from scratch, or Stockfish when you want a hard game, and every position is written out for a screen reader. The full list is in [features](docs/features.md).
 
 The puzzles are the part I think is worth something. Chess.com and Lichess both serve them the same way: here is one at roughly your rating, next. Neither lets you say "give me twenty three-move knight forks in an endgame at 1600." The corpus is Lichess's CC0 set, which cost them over a hundred years of CPU time to generate and which they gave away, so generating puzzles is not the interesting problem. Making them searchable is. The LeetCode comparison is the honest one: LeetCode did not invent the problems, it made them filterable, rated, and trackable.
 
 The engine repo answers "can I train a model?" This repo answers a different question: can I serve one? Stateless Go API instances with game state in Redis, engine inference decoupled onto queue-fed workers, a puzzle sampler that draws uniformly from three million rows without sorting them, and the whole thing defined in Terraform.
 
-**Stack:** Go, React, PostgreSQL, Redis, SQS, ONNX Runtime, Docker, Terraform, AWS (ALB, ECS Fargate, ElastiCache, RDS)
+The site itself runs on one t4g.small under Docker Compose (`deploy/demo`), with a real SQS queue, for about $17 a month. The Terraform stack in `deploy/terraform`, an api fleet behind an ALB with workers autoscaled on queue depth, is what it scales to. That one was deployed and load-tested rather than left on paper, and the numbers are in [operations](docs/operations.md).
+
+**Stack:** Go, React, PostgreSQL, Redis, SQS, ONNX Runtime, Stockfish, Docker, Terraform, AWS (EC2 for the live site; ECS Fargate, ALB, ElastiCache and RDS in the reference stack)
 
 ## Documentation
 
@@ -18,7 +20,6 @@ The engine repo answers "can I train a model?" This repo answers a different que
 - [Architecture and design decisions](docs/architecture.md)
 - [Operations, deployment and load tests](docs/operations.md)
 - [Puzzle design](docs/puzzles.md)
-- [Project progress](docs/progress.md)
 
 ## Running it locally
 
