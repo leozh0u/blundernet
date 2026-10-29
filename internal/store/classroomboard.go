@@ -99,7 +99,11 @@ func (b *ClassBoard) Watch(ctx context.Context, classroomID string) <-chan []byt
 				if !ok {
 					return
 				}
-				out <- []byte(msg.Payload)
+				select {
+				case out <- []byte(msg.Payload):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()

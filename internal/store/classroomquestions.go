@@ -66,6 +66,11 @@ func (c *Classrooms) Ask(ctx context.Context, classroomID, userID, fen, prompt s
 	}
 	defer tx.Rollback(ctx)
 
+	var roomID string
+	if err := tx.QueryRow(ctx, `SELECT id FROM classrooms WHERE id = $1 FOR UPDATE`, classroomID).Scan(&roomID); err != nil {
+		return nil, err
+	}
+
 	if _, err := tx.Exec(ctx, `
 		UPDATE classroom_questions SET closed_at = now()
 		WHERE classroom_id = $1 AND closed_at IS NULL`, classroomID); err != nil {

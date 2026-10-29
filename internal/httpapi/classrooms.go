@@ -574,6 +574,11 @@ func (s *Server) handleBoardWatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(1024) // clients send no application messages
+	_ = conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+	})
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -594,6 +599,7 @@ func (s *Server) handleBoardWatch(w http.ResponseWriter, r *http.Request) {
 	// to touch a piece.
 	if current, err := s.board.Current(ctx, id); err == nil {
 		if raw, err := json.Marshal(current); err == nil {
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
 				return
 			}
@@ -614,6 +620,7 @@ func (s *Server) handleBoardWatch(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
 				return
 			}

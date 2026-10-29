@@ -2,6 +2,7 @@
 # Boots the demo box: Docker, the two app images from ECR, Postgres and
 # Redis alongside them, and Caddy in front. Runs on every fresh instance.
 set -euxo pipefail
+umask 077
 
 dnf install -y docker
 systemctl enable --now docker
@@ -15,17 +16,10 @@ mkdir -p /opt/blundernet
 
 # The database lives on a volume that outlives this instance. Wait for the
 # attachment, format it only if it has never been used, and mount it. Doing
-# this by NVMe serial rather than device name because Nitro renames /dev/sdf.
+# this by the Amazon Linux attachment symlink because NVMe names can change.
 DATA_DEV=""
 for _ in $(seq 1 60); do
-  for candidate in /dev/nvme?n1; do
-    [ -b "$candidate" ] || continue
-    # The root volume is the one carrying a mounted filesystem already.
-    if ! lsblk -no MOUNTPOINTS "$candidate" | grep -q '/$'; then
-      DATA_DEV="$candidate"
-      break
-    fi
-  done
+  if [ -b /dev/sdf ]; then DATA_DEV=/dev/sdf; fi
   [ -n "$DATA_DEV" ] && break
   sleep 5
 done
@@ -38,11 +32,12 @@ if [ -n "$DATA_DEV" ]; then
   fi
   mkdir -p /var/lib/blundernet
   mount "$DATA_DEV" /var/lib/blundernet
-  echo "$DATA_DEV /var/lib/blundernet xfs defaults,nofail 0 2" >> /etc/fstab
+  DATA_UUID=$(blkid -s UUID -o value "$DATA_DEV")
+  echo "UUID=$DATA_UUID /var/lib/blundernet xfs defaults 0 2" >> /etc/fstab
   mkdir -p /var/lib/blundernet/pgdata
 else
-  echo "no data volume found; falling back to instance storage" >&2
-  mkdir -p /var/lib/blundernet/pgdata
+  echo "data volume missing; refusing to start a database on instance storage" >&2
+  exit 1
 fi
 
 # Caddy terminates TLS automatically when a domain is set; without one it
@@ -178,6 +173,7 @@ cat >/etc/systemd/system/blundernet.service <<'UNIT'
 Description=BlunderNet demo stack
 After=docker.service
 Requires=docker.service
+RequiresMountsFor=/var/lib/blundernet
 
 [Service]
 Type=oneshot
@@ -249,9 +245,8 @@ cat >/etc/systemd/system/blundernet-backup.timer <<'UNIT'
 Description=Nightly BlunderNet database backup
 
 [Timer]
-# 03:15 UTC, which is the middle of the night in Houston and nowhere near a
-# deploy. RandomizedDelaySec so a fleet would not all dump at once.
-OnCalendar=*-*-* 03:15:00
+# 03:15 UTC regardless of host timezone. RandomizedDelaySec spreads fleet dumps.
+OnCalendar=*-*-* 03:15:00 UTC
 RandomizedDelaySec=600
 Persistent=true
 

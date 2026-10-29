@@ -170,7 +170,7 @@ export function MoveNavigator({ line, nav, heading = 'The answer' }) {
   if (!line || line.moves.length === 0) return null
   return (
     <div className="answer">
-      <h4>{heading}</h4>
+      <h3>{heading}</h3>
       <p className="answer-line">
         {line.moves.map((m, i) => (
           <button

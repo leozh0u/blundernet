@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useDialog } from '../lib/dialog.js'
 
 // "Something is broken" in the footer.
 //
@@ -12,6 +13,7 @@ export default function Feedback() {
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState(null)
+  const dialog = useDialog(open, close)
 
   async function submit(e) {
     e.preventDefault()
@@ -45,17 +47,14 @@ export default function Feedback() {
     setError(null)
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button type="button" className="link quiet" onClick={() => setOpen(true)}>
         Something broken?
       </button>
-    )
-  }
-
-  return (
+    {open && (
     <div className="modal-back" onClick={close}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" ref={dialog} role="dialog" aria-modal="true" aria-label={sent ? 'Thank you' : 'Tell me what is wrong'} onClick={(e) => e.stopPropagation()}>
         {sent ? (
           <>
             <h2>Thank you</h2>
@@ -84,7 +83,6 @@ export default function Feedback() {
                 rows={5}
                 maxLength={2000}
                 placeholder="The board did not load on..."
-                autoFocus
                 required
               />
             </label>
@@ -101,5 +99,7 @@ export default function Feedback() {
         )}
       </div>
     </div>
+    )}
+    </>
   )
 }

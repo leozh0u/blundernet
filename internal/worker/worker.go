@@ -274,6 +274,9 @@ func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 		obs.JobOutcome(obs.JobPlayed)
 		return nil
 	}
+	if g.Status == game.StatusFinished && w.Archive != nil {
+		return w.Archive.SaveFinished(ctx, g)
+	}
 
 	// Stale or duplicate delivery: the position has moved past this job.
 	if g.Ply != j.Ply || g.Status != game.StatusOngoing || g.Turn() != g.EngineColor() {
@@ -312,7 +315,7 @@ func (w *Worker) Process(ctx context.Context, j queue.Job) error {
 	if g.Status == game.StatusFinished && w.Archive != nil {
 		obs.GameFinished(g.Result)
 		if err := w.Archive.SaveFinished(ctx, g); err != nil {
-			slog.Error("archive", "game", g.ID, "err", err)
+			return err // redelivery retries archival even though the move is already saved
 		}
 	}
 	return nil

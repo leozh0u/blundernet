@@ -89,11 +89,13 @@ func (s *Server) limitKey(r *http.Request, group string) (string, bool) {
 func (s *Server) clientIP(r *http.Request) string {
 	if s.trustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			// Leftmost entry is the original client; the rest is the proxy
-			// chain appended on the way in.
-			first, _, _ := strings.Cut(xff, ",")
-			if ip := strings.TrimSpace(first); ip != "" {
-				return ip
+			// Our single trusted edge appends its peer; any prefix is client-controlled.
+			last := xff
+			if i := strings.LastIndexByte(last, ','); i >= 0 {
+				last = last[i+1:]
+			}
+			if ip := net.ParseIP(strings.TrimSpace(last)); ip != nil {
+				return ip.String()
 			}
 		}
 	}

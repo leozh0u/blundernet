@@ -18,6 +18,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 SERVICES="${*:-api worker}"
+for svc in $SERVICES; do
+  case "$svc" in api|worker) ;; *) echo "unknown service: $svc" >&2; exit 2 ;; esac
+done
 
 INSTANCE=$(terraform -chdir=deploy/demo output -raw instance_id)
 REGISTRY=$(terraform -chdir=deploy/demo output -raw ecr_api | cut -d/ -f1)
@@ -35,8 +38,7 @@ registry, services = sys.argv[1], sys.argv[2]
 print(json.dumps({"commands": [
     "set -e",
     f"aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin {registry}",
-    f"cd /opt/blundernet && docker compose pull {services} && docker compose up -d {services}",
-    "sleep 10",
+    f"cd /opt/blundernet && docker compose pull {services} && docker compose up -d --wait --wait-timeout 120 {services}",
     "docker ps --format '{{.Names}} | {{.Status}}'",
     "systemctl is-active blundernet.service",
 ]}))

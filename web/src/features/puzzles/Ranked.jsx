@@ -6,6 +6,7 @@ import { buildLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
 import { useBoardMotion, useBoardWidth, useBlindfold } from '../../lib/board.js'
 import { PositionText, BlindfoldButton } from '../../components/Position.jsx'
 import BoardOverlay from '../../components/BoardOverlay.jsx'
+import MoveInput from '../../components/MoveInput.jsx'
 
 // Ranked mode. One puzzle at your level, no filters, no hints, no second try,
 // and the rating moves both ways.
@@ -36,6 +37,7 @@ export default function Ranked() {
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
+  const step = useRef(0)
 
   const later = useCallback((fn, ms) => {
     timers.current.push(setTimeout(fn, ms))
@@ -58,9 +60,15 @@ export default function Ranked() {
       setResult(null)
       setSelected(null)
       setVerdict(null)
+      step.current = p.step || 0
       motion.jump()
-      setPhase('setup')
       setBoard(new Chess(p.fen))
+      startedAt.current = Date.now()
+      if (!p.setup_move) {
+        setPhase('solving')
+        return
+      }
+      setPhase('setup')
       later(() => {
         const after = new Chess(p.fen)
         after.move({
@@ -77,21 +85,23 @@ export default function Ranked() {
   )
 
   const next = useCallback(async () => {
+    clearLater()
     setPhase('loading')
     setAnswer(null)
     setError('')
-    const res = await fetch('/api/puzzles/ranked')
-    if (res.status === 401) {
-      setPhase('locked')
-      return
-    }
-    if (!res.ok) {
+    try {
+      const res = await fetch('/api/puzzles/ranked')
+      if (res.status === 401) {
+        setPhase('locked')
+        return
+      }
+      if (!res.ok) throw new Error()
+      present(await res.json())
+    } catch {
       setError('No puzzle came back. Try again in a moment.')
       setPhase('empty')
-      return
     }
-    present(await res.json())
-  }, [present])
+  }, [present, clearLater])
 
   useEffect(() => {
     loadMe()
@@ -111,16 +121,21 @@ export default function Ranked() {
   }, [loadMe, next])
 
   const send = async (uci, positionBefore, afterMine) => {
-    const res = await fetch('/api/puzzles/ranked/move', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uci, ms: Date.now() - startedAt.current }),
-    })
-    if (!res.ok) {
-      setError('That move could not be sent. Reload to pick the puzzle back up.')
+    let body
+    try {
+      const res = await fetch('/api/puzzles/ranked/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uci, ms: Date.now() - startedAt.current }),
+      })
+      if (!res.ok) throw new Error()
+      body = await res.json()
+    } catch {
+      setBoard(positionBefore)
+      setPhase('empty')
+      setError('That move could not be confirmed. Resume the puzzle to check its position.')
       return
     }
-    const body = await res.json()
     // Cleared on a timer rather than by whatever happens next. It used to come
     // down only when the following puzzle loaded, so the mark sat on the board
     // through the whole answer walk, pinned to a square the position had
@@ -141,17 +156,18 @@ export default function Ranked() {
         })
         motion.move()
         setBoard(answered)
+        step.current += 2
+        setPhase('solving')
       }, 350)
       return
     }
 
-    setPhase('done')
     setResult(body)
+    setPhase('done')
     loadMe()
     if (!body.correct && body.solution) {
       // Rewind to before the mistake and hand back the real line to walk.
-      const from = stepOf(positionBefore, puzzle)
-      const line = buildLine(positionBefore, body.solution, from)
+      const line = buildLine(positionBefore, body.solution, step.current)
       motion.jump()
       setBoard(positionBefore)
       setAnswer(line)
@@ -166,13 +182,6 @@ export default function Ranked() {
     setBoard(new Chess(nav.fen))
   }, [nav.fen, nav.cursor, motion.step])
 
-  // How many plies of the solution had been played when the attempt ended.
-  // The board history holds the setup move plus everything since.
-  const stepOf = (position, p) => {
-    if (!p) return 0
-    return Math.max(0, position.history().length - 1)
-  }
-
   const tryMove = (from, to) => {
     if (phase !== 'solving' || !board) return false
     const probe = new Chess(board.fen())
@@ -183,6 +192,7 @@ export default function Ranked() {
       return false
     }
     if (!mv) return false
+    setPhase('sending')
     setSelected(null)
     const before = new Chess(board.fen())
     setBoard(probe)
@@ -258,8 +268,8 @@ export default function Ranked() {
             boardOrientation={puzzle?.color || 'white'}
             arePiecesDraggable={phase === 'solving'}
             customBoardStyle={{ borderRadius: '6px' }}
-            customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-            customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
             customSquareStyles={squareStyles}
           />
           )}
@@ -272,6 +282,7 @@ export default function Ranked() {
         <div className={`state ${result && !result.correct ? 'wrong' : 'yours'}`}>
           {phase === 'loading' && <span className="head">Finding your puzzle</span>}
           {phase === 'setup' && <span className="head">Watch the blunder</span>}
+          {phase === 'sending' && <span className="head">Checking your move</span>}
           {phase === 'solving' && puzzle && (
             <>
               <span className="head">
@@ -298,7 +309,7 @@ export default function Ranked() {
         </div>
 
         <div className="record">
-          <h3>Ranked</h3>
+          <h2>Ranked</h2>
           <dl className="meta">
             <div>
               <dt>Your rating</dt>
@@ -335,8 +346,10 @@ export default function Ranked() {
             </button>
           </div>
         )}
-        {phase === 'solving' && (
+        {phase === 'empty' && <button className="wide" onClick={next}>Resume puzzle</button>}
+        {(phase === 'solving' || phase === 'sending') && (
           <div className="during">
+            <MoveInput onMove={tryMove} disabled={phase !== 'solving'} />
             <BlindfoldButton on={blindfold.on} onToggle={blindfold.toggle} />
           </div>
         )}

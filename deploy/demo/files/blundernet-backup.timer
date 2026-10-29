@@ -2,9 +2,8 @@
 Description=Nightly BlunderNet database backup
 
 [Timer]
-# 03:15 UTC, which is the middle of the night in Houston and nowhere near a
-# deploy. RandomizedDelaySec so a fleet would not all dump at once.
-OnCalendar=*-*-* 03:15:00
+# 03:15 UTC regardless of host timezone. RandomizedDelaySec spreads fleet dumps.
+OnCalendar=*-*-* 03:15:00 UTC
 RandomizedDelaySec=600
 Persistent=true
 

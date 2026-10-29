@@ -237,6 +237,7 @@ export default function Classrooms({ roomID, onOpen }) {
           </div>
         )}
 
+        <div className="roster-scroll" role="region" aria-label="Classroom roster" tabIndex={0}>
         <table className="roster">
           <thead>
             <tr>
@@ -272,6 +273,7 @@ export default function Classrooms({ roomID, onOpen }) {
             ))}
           </tbody>
         </table>
+        </div>
         {/* The lesson itself. A student watches the coach's board the whole
             time, and a question is something that happens on top of that
             rather than the only time a position appears. */}

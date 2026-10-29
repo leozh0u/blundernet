@@ -9,7 +9,7 @@ export default function About() {
   return (
     <section className="about">
       <p className="about-lead">
-        BlunderNet is a free chess trainer. Six million puzzles you can filter,
+        BlunderNet is a free chess trainer. 3,253,092 puzzles you can filter,
         a bot to play, and a review of any game you paste in. No adverts, no
         paid tier, no email address collected.
       </p>
@@ -43,7 +43,7 @@ export default function About() {
         Paste a game from anywhere and every move is judged by how much it
         changed your chances of winning, with an accuracy score for each side
         and the move the engine would have played instead. Stockfish does the
-        analysis, so the advice is right.
+        analysis.
       </p>
 
       <h3>Classroom</h3>

@@ -1,6 +1,6 @@
 module github.com/leozh0u/blundernet
 
-go 1.26.5
+go 1.26.10
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
@@ -17,7 +17,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/yalue/onnxruntime_go v1.31.0
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.56.0
 )
 
 require (
@@ -44,6 +44,6 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

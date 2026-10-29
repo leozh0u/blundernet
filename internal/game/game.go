@@ -43,6 +43,7 @@ type Game struct {
 	ID          string   `json:"id"`
 	Moves       []string `json:"moves"`
 	Ply         int      `json:"ply"`
+	Revision    uint64   `json:"revision"`     // every stored change, including joins and resignations
 	PlayerColor string   `json:"player_color"` // "white" or "black"
 	// Empty for anonymous games, which stay supported. The id travels with
 	// the game through Redis because the archive write happens in the worker,

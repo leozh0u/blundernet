@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -87,12 +88,17 @@ func (s *Server) handleRankedNext(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
-			writeJSON(w, http.StatusOK, toRankedView(p, state.Step))
+			view, err := toRankedView(p, state.Step)
+			if err != nil {
+				internalError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, view)
 			return
 		}
 		// The puzzle went away under the attempt, which only happens if the
 		// corpus was reloaded mid-solve. Drop it and draw another.
-		if err := s.ranked.Clear(r.Context(), user.ID); err != nil {
+		if err := s.ranked.Replace(r.Context(), user.ID, &state, nil); err != nil {
 			internalError(w, err)
 			return
 		}
@@ -117,13 +123,18 @@ func (s *Server) handleRankedNext(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusNotFound, "no puzzle left at your rating")
 		return
 	}
-	if err := s.ranked.Set(r.Context(), user.ID, store.InProgress{
+	if err := s.ranked.Replace(r.Context(), user.ID, nil, &store.InProgress{
 		PuzzleID: p.ID, Step: 0, Started: time.Now(),
 	}); err != nil {
+		gameError(w, err)
+		return
+	}
+	view, err := toRankedView(p, 0)
+	if err != nil {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toRankedView(p, 0))
+	writeJSON(w, http.StatusOK, view)
 }
 
 // drawRanked widens the band rather than giving up. The first window is the
@@ -147,11 +158,19 @@ func (s *Server) drawRanked(r *http.Request, rating int, seen map[string]bool) (
 	return s.puzzles.One(r.Context(), store.Filter{}, func(id string) bool { return seen[id] })
 }
 
-func toRankedView(p puzzle.Puzzle, step int) rankedView {
-	return rankedView{
+func toRankedView(p puzzle.Puzzle, step int) (rankedView, error) {
+	v := rankedView{
 		ID: p.ID, FEN: p.FEN, SetupMove: p.SetupMove(), Color: p.SolverColor(),
 		Step: step,
 	}
+	if step > 0 {
+		fen, err := p.FENAfter(step)
+		if err != nil {
+			return rankedView{}, err
+		}
+		v.FEN, v.SetupMove = fen, ""
+	}
+	return v, nil
 }
 
 type rankedMoveRequest struct {
@@ -196,7 +215,7 @@ func (s *Server) handleRankedMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !exists {
-		_ = s.ranked.Clear(r.Context(), user.ID)
+		_ = s.ranked.Replace(r.Context(), user.ID, &state, nil)
 		httpError(w, http.StatusConflict, "that puzzle is gone")
 		return
 	}
@@ -206,10 +225,10 @@ func (s *Server) handleRankedMove(w http.ResponseWriter, r *http.Request) {
 		// The opponent's forced reply is the next ply, and the solver is up
 		// again after it.
 		reply := p.Solution()[state.Step+1]
-		if err := s.ranked.Set(r.Context(), user.ID, store.InProgress{
+		if err := s.ranked.Replace(r.Context(), user.ID, &state, &store.InProgress{
 			PuzzleID: state.PuzzleID, Step: state.Step + 2, Started: state.Started,
 		}); err != nil {
-			internalError(w, err)
+			gameError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, rankedMoveResponse{Correct: true, Reply: reply})
@@ -218,12 +237,16 @@ func (s *Server) handleRankedMove(w http.ResponseWriter, r *http.Request) {
 
 	// Either it is over or it was wrong, and both end the attempt. There is no
 	// second try in ranked; that is what learning mode is for.
-	out, err := s.puzzles.RecordRanked(r.Context(), user.ID, p.ID, correct, req.Ms)
+	out, err := s.puzzles.RecordRanked(r.Context(), user.ID, p.ID, correct, req.Ms, state.Started)
+	if errors.Is(err, store.ErrConflict) {
+		httpError(w, http.StatusConflict, "that attempt was already recorded")
+		return
+	}
 	if err != nil {
 		internalError(w, err)
 		return
 	}
-	if err := s.ranked.Clear(r.Context(), user.ID); err != nil {
+	if err := s.ranked.Replace(r.Context(), user.ID, &state, nil); err != nil {
 		slog.Warn("clear ranked attempt", "user", user.ID, "err", err)
 	}
 	if err := s.seen.Add(r.Context(), user.ID, p.ID); err != nil {

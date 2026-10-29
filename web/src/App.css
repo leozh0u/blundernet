@@ -17,11 +17,12 @@
 
   --ink: #f1f4f8;
   --ink-soft: #b4c0cd;
-  --ink-faint: #8593a2;
+  --ink-faint: #95a3b2;
 
   /* The one accent. Reserved for primary actions and the live-turn marker,
      so its presence always means the same thing. */
   --blue: #4a90d9;
+  --blue-text: #80b6ed;
   --blue-deep: #3b79ba;
   --blue-shadow: #2b5a8c;
   --blue-wash: rgba(74, 144, 217, 0.15);
@@ -53,7 +54,7 @@
      that is nearly white and a dark square with enough contrast to tell the
      pieces apart at a glance. */
   --sq-light: #e6ecf3;
-  --sq-dark: #567d9f;
+  --sq-dark: #486b8b;
 
   --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -196,7 +197,7 @@ button {
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--blue);
+  color: var(--blue-text);
   font-weight: 500;
   cursor: pointer;
 }
@@ -442,7 +443,7 @@ button {
 }
 
 .verdict.win h2 {
-  color: var(--blue);
+  color: var(--blue-text);
 }
 
 .verdict .wax {
@@ -485,7 +486,7 @@ button {
 
 .state.yours {
   background: var(--blue-wash);
-  color: var(--blue);
+  color: var(--blue-text);
 }
 
 .state .hint {
@@ -495,8 +496,7 @@ button {
 }
 
 .state.yours .hint {
-  color: var(--blue);
-  opacity: 0.7;
+  color: var(--blue-text);
 }
 
 .record {
@@ -507,6 +507,7 @@ button {
   overflow: hidden;
 }
 
+.record h2,
 .record h3 {
   margin: 0;
   padding: 0.5rem 0.75rem;
@@ -661,7 +662,7 @@ button {
 
 .modal .note {
   font-size: 0.94rem;
-  color: var(--blue);
+  color: var(--blue-text);
   background: var(--blue-wash);
   padding: 0.5rem 0.65rem;
   border-radius: var(--radius);
@@ -783,6 +784,7 @@ button {
   }
   .ledger {
     width: 100%;
+    flex-wrap: wrap;
     justify-content: flex-start;
     text-align: left;
   }
@@ -1089,6 +1091,10 @@ button {
     flex-basis: 100%;
     justify-content: flex-start;
   }
+  .nav {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
 }
 
 /* The explanation, which is assembled from the tags and the position the
@@ -1286,6 +1292,7 @@ button {
   padding: 0.5rem 0.75rem 0;
 }
 
+.record-head h2,
 .record-head h3 {
   margin-right: auto;
 }
@@ -1294,6 +1301,7 @@ button {
   font-size: 0.94rem;
 }
 
+.record-head h2,
 .record-head h3 {
   padding-bottom: 0;
 }
@@ -1325,7 +1333,7 @@ button {
 }
 
 .star.on {
-  color: var(--blue);
+  color: var(--blue-text);
 }
 
 /* ---------- classrooms ---------- */
@@ -1409,6 +1417,10 @@ button {
 .room-code-actions {
   display: flex;
   gap: 1rem;
+}
+
+.roster-scroll {
+  overflow-x: auto;
 }
 
 .roster {
@@ -1944,7 +1956,7 @@ button {
 }
 
 .about a {
-  color: var(--blue);
+  color: var(--blue-text);
 }
 
 @media (max-width: 46rem) {
@@ -2398,7 +2410,7 @@ button {
   border-top: 1px solid var(--line);
 }
 
-.answer h4 {
+.answer h3 {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--ink-soft);
@@ -2435,7 +2447,7 @@ button {
 }
 
 .answer-move.on .answer-san {
-  color: var(--blue);
+  color: var(--blue-text);
 }
 
 .answer-move:focus-visible {
@@ -2477,7 +2489,7 @@ button {
 
 .answer-nav button:hover:not(:disabled) {
   border-color: var(--blue);
-  color: var(--blue);
+  color: var(--blue-text);
 }
 
 /* A disabled step control is the end of the line, which is information. It
@@ -3028,3 +3040,35 @@ button {
   width: 100%;
   max-width: 28rem;
 }
+
+.move-entry {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.move-entry label {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.25rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.move-entry input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  color: var(--ink);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.move-entry input::placeholder { color: var(--ink-faint); }
+.move-entry input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.move-entry button { width: auto; flex: none; }
+.move-entry .form-error { flex-basis: 100%; }

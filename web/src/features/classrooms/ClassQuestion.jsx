@@ -3,6 +3,7 @@ import { Chessboard } from 'react-chessboard'
 import { Chess } from 'chess.js'
 import { useBoardWidth } from '../../lib/board.js'
 import { PositionText } from '../../components/Position.jsx'
+import MoveInput from '../../components/MoveInput.jsx'
 
 // The question a class is currently on.
 //
@@ -151,8 +152,8 @@ export default function ClassQuestion({ classroomID, role, refreshKey }) {
               onSquareClick={clickSquare}
               animationDuration={0}
               customBoardStyle={{ borderRadius: '6px' }}
-              customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-              customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
               customSquareStyles={
                 selected ? { [selected]: { background: 'rgba(246, 200, 92, 0.6)' } } : {}
               }
@@ -188,6 +189,7 @@ export default function ClassQuestion({ classroomID, role, refreshKey }) {
             </>
           ) : (
             <>
+              <MoveInput onMove={answer} />
               {question.mine ? (
                 <p className="question-mine">
                   You answered <strong>{question.mine}</strong>. Play another move to

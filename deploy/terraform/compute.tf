@@ -4,11 +4,14 @@
 
 locals {
   redis_url    = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379"
-  database_url = "postgres://blundernet:${var.db_password}@${aws_db_instance.db.endpoint}/blundernet"
+  database_url = "postgres://blundernet:${replace(urlencode(var.db_password), "+", "%20")}@${aws_db_instance.db.endpoint}/blundernet"
   app_env = [
     { name = "REDIS_URL", value = local.redis_url },
     { name = "DATABASE_URL", value = local.database_url },
     { name = "SQS_QUEUE_URL", value = aws_sqs_queue.moves.url },
+    # This reference stack's ALB is HTTP; only the domain-backed demo has TLS.
+    { name = "SECURE_COOKIES", value = "false" },
+    { name = "TRUST_PROXY", value = "true" },
   ]
 }
 

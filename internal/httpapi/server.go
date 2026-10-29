@@ -185,7 +185,11 @@ func New(d Deps) *Server {
 	//
 	// The body cap sits outermost so it applies before anything reads, and the
 	// headers sit inside it so they are set on the 413 too.
-	s.handler = capBody(s.secureHeaders(s.withUser(mux)))
+	origin := http.NewCrossOriginProtection()
+	origin.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpError(w, http.StatusForbidden, "cross-origin request refused")
+	}))
+	s.handler = capBody(s.secureHeaders(origin.Handler(s.withUser(mux))))
 	return s
 }
 
@@ -544,6 +548,9 @@ func (s *Server) afterChange(ctx context.Context, g *game.Game) {
 		}
 		if err := s.archive.SaveFinished(ctx, g); err != nil {
 			slog.Error("archive", "game", g.ID, "err", err)
+			if err := s.jobs.Enqueue(ctx, queue.Job{GameID: g.ID, Ply: g.Ply}); err != nil {
+				slog.Error("queue archive retry", "game", g.ID, "err", err)
+			}
 		}
 	case !g.Friend && g.Turn() == g.EngineColor():
 		if err := s.jobs.Enqueue(ctx, queue.Job{GameID: g.ID, Ply: g.Ply}); err != nil {
@@ -585,6 +592,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(1024) // clients send no application messages
+	_ = conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+	})
 	obs.WSOpened()
 	defer obs.WSClosed()
 
@@ -605,6 +617,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	// Initial snapshot, then pub/sub events. One writer goroutine total,
 	// as gorilla requires.
 	if raw, err := json.Marshal(ToStateFor(g, userIDOf(r))); err == nil {
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
 			return
 		}
@@ -623,6 +636,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.WriteMessage(websocket.TextMessage, raw); err != nil {
 				return
 			}

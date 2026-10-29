@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 
@@ -39,6 +40,10 @@ type InProgress struct {
 	Started  time.Time `json:"started"`
 }
 
+func attemptID(userID, puzzleID string, started time.Time) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(userID+":"+puzzleID+":"+started.UTC().Format(time.RFC3339Nano))).String()
+}
+
 func rankedKey(userID string) string { return "puzzles:ranked:" + userID }
 
 func (r *Ranked) Get(ctx context.Context, userID string) (InProgress, bool, error) {
@@ -54,18 +59,6 @@ func (r *Ranked) Get(ctx context.Context, userID string) (InProgress, bool, erro
 		return InProgress{}, false, err
 	}
 	return s, true, nil
-}
-
-func (r *Ranked) Set(ctx context.Context, userID string, s InProgress) error {
-	raw, err := json.Marshal(s)
-	if err != nil {
-		return err
-	}
-	return r.rdb.Set(ctx, rankedKey(userID), raw, rankedTTL).Err()
-}
-
-func (r *Ranked) Clear(ctx context.Context, userID string) error {
-	return r.rdb.Del(ctx, rankedKey(userID)).Err()
 }
 
 // RankedOutcome is what changed, which is the only thing worth reporting after
@@ -88,7 +81,7 @@ type RankedOutcome struct {
 // The user row is locked before the puzzle row, always in that order, so two
 // people solving the same puzzle at the same moment queue instead of
 // deadlocking.
-func (p *Puzzles) RecordRanked(ctx context.Context, userID, puzzleID string, solved bool, ms int) (RankedOutcome, error) {
+func (p *Puzzles) RecordRanked(ctx context.Context, userID, puzzleID string, solved bool, ms int, started time.Time) (RankedOutcome, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return RankedOutcome{}, err
@@ -137,11 +130,16 @@ func (p *Puzzles) RecordRanked(ctx context.Context, userID, puzzleID string, sol
 		OpponentRating: user.Rating, OpponentDeviation: user.Deviation, Score: 1 - score,
 	}})
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO puzzle_attempts (user_id, puzzle_id, solved, ms, mode, hints_used)
-		VALUES ($1, $2, $3, $4, 'ranked', 0)`,
-		userID, puzzleID, solved, nullableInt(ms)); err != nil {
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO puzzle_attempts (user_id, puzzle_id, solved, ms, mode, hints_used, attempt_id)
+		VALUES ($1, $2, $3, $4, 'ranked', 0, $5)
+		ON CONFLICT (attempt_id) DO NOTHING`,
+		userID, puzzleID, solved, nullableInt(ms), attemptID(userID, puzzleID, started))
+	if err != nil {
 		return RankedOutcome{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return RankedOutcome{}, ErrConflict
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE users

@@ -42,6 +42,10 @@ jobs:
         run: go test -race ./...
       - name: Build
         run: go build ./...
+      - name: Vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Deployment failure paths
+        run: python3 scripts/test_ops.py
 
   frontend:
     runs-on: ubuntu-latest
@@ -59,6 +63,10 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      - name: Test
+        run: npm test
+      - name: Dependency audit
+        run: npm audit --audit-level=high
 
   terraform:
     runs-on: ubuntu-latest
@@ -70,6 +78,9 @@ jobs:
           terraform -chdir=deploy/terraform init -backend=false
           terraform -chdir=deploy/terraform fmt -check
           terraform -chdir=deploy/terraform validate
+          terraform -chdir=deploy/demo init -backend=false
+          terraform -chdir=deploy/demo fmt -check
+          terraform -chdir=deploy/demo validate
 
   # Full-stack proof: build the real images, boot the stack, and play a
   # game against the engine over the public API. The model artifact is
