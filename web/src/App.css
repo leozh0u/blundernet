@@ -900,6 +900,7 @@ button {
 
 .filters {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.45rem;
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--line);
@@ -959,6 +960,8 @@ button {
 }
 
 .theme-select {
+  min-width: 0;
+  max-width: 100%;
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
