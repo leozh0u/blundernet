@@ -84,6 +84,12 @@ function wsURL(id) {
 
 const other = (c) => (c === 'white' ? 'black' : 'white')
 
+function isOlderState(next, current) {
+  return current?.id === next.id && (
+    (next.revision ?? 0) < (current.revision ?? 0) || next.moves.length < current.moves.length
+  )
+}
+
 // soundForLastMove works out what the move that just arrived actually did.
 // The socket sends a position and a move list, not "this was a capture", so
 // the move is replayed against the position before it to find out.
@@ -335,6 +341,7 @@ export default function App() {
       }
       setHint(null)
       setState((prev) => {
+        if (isOlderState(next, prev)) return prev
         // The opponent's move arrives here, so this is where it gets a sound.
         // Replaying the last move against the previous position is what tells
         // a capture from a quiet move, and the socket carries neither.
@@ -397,13 +404,13 @@ export default function App() {
       .then(({ ok, body }) => {
         if (!ok) throw new Error(body.error || 'That move was refused.')
         // A worker's reply may arrive before this HTTP response.
-        setState((s) => s?.id === body.id && s.moves.length <= body.moves.length ? body : s)
+        setState((s) => s?.id === body.id && !isOlderState(body, s) ? body : s)
       })
       .catch(async (e) => {
         setError(e.message || 'That move could not be sent. Try again.')
         // A lost response may still have committed the move on the server.
         const current = await api.game(before.id).catch(() => before)
-        setState((s) => s?.id === before.id && s.moves.length <= current.moves.length ? current : s)
+        setState((s) => s?.id === before.id && !isOlderState(current, s) ? current : s)
       })
       .finally(() => {
         if (movePending.current === before.id) movePending.current = null

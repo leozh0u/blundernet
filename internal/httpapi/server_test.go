@@ -59,6 +59,9 @@ func TestCreateAndMoveFlow(t *testing.T) {
 	if len(q.jobs) != 0 {
 		t.Fatalf("white game should not enqueue on create, got %v", q.jobs)
 	}
+	if st.Revision == 0 {
+		t.Fatal("created game has no revision")
+	}
 
 	rec = do(t, s, "POST", "/api/games/"+st.ID+"/moves", `{"uci":"e2e4"}`)
 	if rec.Code != http.StatusOK {
@@ -66,6 +69,13 @@ func TestCreateAndMoveFlow(t *testing.T) {
 	}
 	if len(q.jobs) != 1 || q.jobs[0].Ply != 1 {
 		t.Fatalf("expected one engine job at ply 1, got %v", q.jobs)
+	}
+	var moved State
+	if err := json.Unmarshal(rec.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	if moved.Revision <= st.Revision {
+		t.Fatal("move response did not advance the revision")
 	}
 }
 

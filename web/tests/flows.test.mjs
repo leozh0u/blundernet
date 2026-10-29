@@ -214,6 +214,34 @@ test('a late move HTTP response cannot overwrite a newer engine reply', async ()
   } finally { act(() => tree.unmount()) }
 })
 
+for (const transport of ['HTTP', 'socket']) {
+  test(`a stale ${transport} snapshot cannot undo a same-ply resignation`, async () => {
+    const game = { id: 'game', revision: 1, fen: new Chess().fen(), status: 'ongoing', turn: 'white', player_color: 'white', moves: [] }
+    const pending = deferred()
+    environment('/play', (url, options) => {
+      if (url === '/api/games' && options?.method === 'POST') return response(game)
+      if (url === '/api/games/game/moves') return pending.promise
+    })
+    const tree = await mount(App)
+    try {
+      await act(async () => { tree.root.findByProps({ className: 'choice light' }).props.onClick(); await sleep(0) })
+      await drop(tree, 'e2', 'e4')
+      const moved = { ...game, revision: 2, fen: position(['e4']), turn: 'black', moves: ['e2e4'] }
+      const finished = { ...moved, revision: 3, status: 'finished', result: '0-1', termination: 'resignation' }
+      await act(async () => { WebSocket.last.onmessage({ data: JSON.stringify(finished) }) })
+      if (transport === 'socket') {
+        await act(async () => { WebSocket.last.onmessage({ data: JSON.stringify(moved) }) })
+        assert.ok(button(tree, 'Again as White'), 'the socket restored an older ongoing state')
+      }
+      await act(async () => {
+        pending.resolve(response(transport === 'HTTP' ? moved : finished))
+        await sleep(0)
+      })
+      assert.ok(button(tree, 'Again as White'), 'the finished game was replaced by an older ongoing state')
+    } finally { act(() => tree.unmount()) }
+  })
+}
+
 test('learning filters ignore stale results and lock the forced reply', async () => {
   const older = deferred()
   const puzzle = { id: 'new', fen: new Chess().fen(), setup_move: 'e2e4', color: 'black', solution: line, themes: [], phase: 'opening' }

@@ -200,6 +200,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.S
 type State struct {
 	Type        string   `json:"type"`
 	ID          string   `json:"id"`
+	Revision    uint64   `json:"revision"`
 	FEN         string   `json:"fen"`
 	Moves       []string `json:"moves"`
 	Turn        string   `json:"turn"`
@@ -229,7 +230,7 @@ func ToStateFor(g *game.Game, userID string) State {
 
 func ToState(g *game.Game) State {
 	return State{
-		Type: "state", ID: g.ID, FEN: g.FEN(), Moves: g.Moves, Turn: g.Turn(),
+		Type: "state", ID: g.ID, Revision: g.Revision, FEN: g.FEN(), Moves: g.Moves, Turn: g.Turn(),
 		PlayerColor: g.PlayerColor, Level: g.Level, Rated: g.Rated,
 		Friend: g.Friend, Waiting: g.Friend && g.OpponentID == "",
 		Status: string(g.Status),
