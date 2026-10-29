@@ -18,6 +18,7 @@ import Logo from './components/Logo.jsx'
 import { sound } from './lib/sound.js'
 import Feedback from './components/Feedback.jsx'
 import GuestNote from './components/GuestNote.jsx'
+import MoveInput from './components/MoveInput.jsx'
 
 const api = {
   async createGame(color, mode, level) {
@@ -82,6 +83,12 @@ function wsURL(id) {
 }
 
 const other = (c) => (c === 'white' ? 'black' : 'white')
+
+function isOlderState(next, current) {
+  return current?.id === next.id && (
+    (next.revision ?? 0) < (current.revision ?? 0) || next.moves.length < current.moves.length
+  )
+}
 
 // soundForLastMove works out what the move that just arrived actually did.
 // The socket sends a position and a move list, not "this was a capture", so
@@ -253,6 +260,7 @@ export default function App() {
   // which names the side of whoever made the game.
   const [myColor, setMyColor] = useState('white')
   const wsRef = useRef(null)
+  const movePending = useRef(null)
 
   useEffect(() => {
     api.stats().then(setStats).catch(() => {})
@@ -312,6 +320,8 @@ export default function App() {
     // menu". Without this the nav looks broken: the path changes and the
     // board stays, with no way back except a reload.
     if (to === 'play') {
+      wsRef.current?.close()
+      wsRef.current = null
       setState(null)
       setHint(null)
     }
@@ -321,6 +331,7 @@ export default function App() {
     wsRef.current?.close()
     const ws = new WebSocket(wsURL(id))
     ws.onmessage = (ev) => {
+      if (wsRef.current !== ws) return
       const next = JSON.parse(ev.data)
       // A hint is an answer to a question, not a new position. It arrives on
       // the same socket because the search takes as long as an engine move.
@@ -330,6 +341,7 @@ export default function App() {
       }
       setHint(null)
       setState((prev) => {
+        if (isOlderState(next, prev)) return prev
         // The opponent's move arrives here, so this is where it gets a sound.
         // Replaying the last move against the previous position is what tells
         // a capture from a quiet move, and the socket carries neither.
@@ -344,7 +356,9 @@ export default function App() {
         return next
       })
     }
-    ws.onerror = () => setError('The connection was lost. Refresh to resume.')
+    ws.onerror = () => {
+      if (wsRef.current === ws) setError('The connection was lost. Refresh to resume.')
+    }
     wsRef.current = ws
   }, [])
 
@@ -370,7 +384,7 @@ export default function App() {
     state && state.status === 'ongoing' && state.turn === myColor && !state.waiting
 
   const tryMove = (from, to) => {
-    if (!myTurn) return false
+    if (!myTurn || movePending.current === state.id) return false
     // The server is the authority. chess.js here only spots promotions and
     // rejects hopeless drops without a round trip.
     const probe = new Chess(state.fen)
@@ -381,15 +395,26 @@ export default function App() {
       return false
     }
     if (!mv) return false
+    const before = state
+    movePending.current = state.id
     setSelected(null)
     sound.forMove(mv, probe)
     setState({ ...state, fen: probe.fen(), turn: other(state.turn) })
-    api.move(state.id, from + to + (mv.promotion ? 'q' : '')).then(({ ok, body }) => {
-      if (!ok) {
-        setError(body.error || 'That move was refused.')
-        setState((s) => ({ ...s }))
-      }
-    })
+    api.move(state.id, from + to + (mv.promotion ? 'q' : ''))
+      .then(({ ok, body }) => {
+        if (!ok) throw new Error(body.error || 'That move was refused.')
+        // A worker's reply may arrive before this HTTP response.
+        setState((s) => s?.id === body.id && !isOlderState(body, s) ? body : s)
+      })
+      .catch(async (e) => {
+        setError(e.message || 'That move could not be sent. Try again.')
+        // A lost response may still have committed the move on the server.
+        const current = await api.game(before.id).catch(() => before)
+        setState((s) => s?.id === before.id && !isOlderState(current, s) ? current : s)
+      })
+      .finally(() => {
+        if (movePending.current === before.id) movePending.current = null
+      })
     return true
   }
 
@@ -447,9 +472,15 @@ export default function App() {
   }
 
   const askForReview = async () => {
+    const id = state.id
     setReviewing(true)
-    setReview(await api.review(state.id))
-    setReviewing(false)
+    try {
+      setReview(await api.review(id))
+    } catch {
+      setError('That review could not be loaded. Try again.')
+    } finally {
+      setReviewing(false)
+    }
   }
 
   const result = state ? outcome(state) : null
@@ -517,6 +548,10 @@ export default function App() {
         </>
       ) : route === 'me' ? (
         <Profile
+          onTheme={(theme) => {
+            window.history.pushState({}, '', `/?${new URLSearchParams({ theme })}`)
+            setRoute('puzzles')
+          }}
           onDrill={(list) => {
             window.history.pushState({}, '', `/?drill=${list}`)
             setRoute('puzzles')
@@ -719,6 +754,7 @@ export default function App() {
         </section>
       ) : (
         <main className="game">
+          <h1 className="visually-hidden">Game</h1>
           <div className="board-wrap">
             <div className={`frame ${blindfold.className}`}>
               <Chessboard
@@ -728,8 +764,8 @@ export default function App() {
                 boardOrientation={myColor}
                 arePiecesDraggable={state.status === 'ongoing'}
                 customBoardStyle={{ borderRadius: '6px' }}
-                customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-                customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
                 customSquareStyles={squareStyles}
               />
               <PositionText board={new Chess(state.fen)} />
@@ -778,7 +814,7 @@ export default function App() {
 
             {state.status === 'finished' && (
               <div className="record">
-                <h3>Review</h3>
+                <h2>Review</h2>
                 {!review ? (
                   <div className="after">
                     <button className="wide" disabled={reviewing} onClick={askForReview}>
@@ -814,7 +850,7 @@ export default function App() {
             )}
 
             <div className="record">
-              <h3>Record of play</h3>
+              <h2>Record of play</h2>
               {pairs.length === 0 ? (
                 <p className="empty">Not a move yet.</p>
               ) : (
@@ -842,6 +878,7 @@ export default function App() {
 
             {state.status === 'ongoing' && (
               <div className="during">
+                <MoveInput onMove={tryMove} disabled={!myTurn} />
                 {!state.rated && (
                   <button
                     className="wide"

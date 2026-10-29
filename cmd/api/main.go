@@ -74,6 +74,9 @@ func main() {
 			},
 		})),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 16,
 	}
 	go func() {
 		slog.Info("api listening", "addr", srv.Addr)

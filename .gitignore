@@ -23,6 +23,7 @@ vendor/
 *.pth
 
 # OS / editor
+__pycache__/
 .DS_Store
 .idea/
 .vscode/*

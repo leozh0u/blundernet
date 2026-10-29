@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/leozh0u/blundernet/internal/engine"
 	"github.com/leozh0u/blundernet/internal/game"
 	"github.com/leozh0u/blundernet/internal/queue"
 	"github.com/leozh0u/blundernet/internal/store"
+	"github.com/leozh0u/blundernet/internal/testdb"
 )
 
 // scriptedEngine returns canned moves; fails the test if asked twice for
@@ -20,6 +22,48 @@ import (
 type scriptedEngine struct {
 	calls int
 	moves []string
+}
+
+func TestRedeliveryRetriesFailedArchiveAfterCheckmate(t *testing.T) {
+	w, games, eng := setup(t)
+	ctx := context.Background()
+	url := testdb.URL(t, "worker_test")
+	unavailable, err := store.NewArchive(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unavailable.Close()
+	w.Archive = unavailable
+	eng.moves = []string{"d8h4"}
+	g := game.New(uuid.NewString(), "white", 1, false)
+	for _, move := range []string{"f2f3", "e7e5", "g2g4"} {
+		if err := g.ApplyMove(g.Turn(), move); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := games.Create(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	job := queue.Job{GameID: g.ID, Ply: 3}
+	if err := w.Process(ctx, job); err == nil {
+		t.Fatal("failed archive was acknowledged")
+	}
+	live, err := store.NewArchive(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	w.Archive = live
+	if err := w.Process(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := live.Pool().QueryRow(ctx, "SELECT count(*) FROM games WHERE id = $1", g.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || eng.calls != 1 {
+		t.Fatalf("archived %d times, engine called %d times", count, eng.calls)
+	}
 }
 
 func (e *scriptedEngine) Name() string { return "scripted" }

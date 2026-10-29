@@ -96,8 +96,8 @@ export default function ClassLiveBoard({ classroomID }) {
             arePiecesDraggable={false}
             animationDuration={140}
             customBoardStyle={{ borderRadius: '6px' }}
-            customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-            customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
           />
         )}
       </div>

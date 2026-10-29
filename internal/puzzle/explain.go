@@ -377,6 +377,9 @@ func Check(p Puzzle, step int, uci string) (correct, finished bool) {
 // positionAfter returns the position the solver faces after the opponent's
 // blunder and the first step plies of the solution.
 func positionAfter(p Puzzle, step int) (*chess.Position, error) {
+	if step < 0 || step >= len(p.Moves) {
+		return nil, fmt.Errorf("puzzle %s: invalid step %d", p.ID, step)
+	}
 	fen, err := chess.FEN(p.FEN)
 	if err != nil {
 		return nil, err
@@ -390,4 +393,13 @@ func positionAfter(p Puzzle, step int) (*chess.Position, error) {
 		pos = pos.Update(mv)
 	}
 	return pos, nil
+}
+
+// FENAfter is the solver's position after setup and step solution plies.
+func (p Puzzle) FENAfter(step int) (string, error) {
+	pos, err := positionAfter(p, step)
+	if err != nil {
+		return "", err
+	}
+	return pos.String(), nil
 }

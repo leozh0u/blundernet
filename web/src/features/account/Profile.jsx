@@ -10,7 +10,7 @@ import Weaknesses from './Weaknesses.jsx'
 
 const fmt = (n) => (n === null || n === undefined ? '...' : Math.round(n))
 
-export default function Profile({ onDrill }) {
+export default function Profile({ onDrill, onTheme }) {
   const [profile, setProfile] = useState(null)
   const [user, setUser] = useState(null)
   const [games, setGames] = useState([])
@@ -137,6 +137,8 @@ export default function Profile({ onDrill }) {
           </div>
         </div>
       </div>
+
+      <Weaknesses onDrill={onTheme} />
 
       {!guest && <RecoverySection user={user} />}
 

@@ -9,7 +9,7 @@ RUN npm ci --ignore-scripts && npm rebuild esbuild
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.26-bookworm AS gobuild
+FROM golang:1.26.10-bookworm AS gobuild
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

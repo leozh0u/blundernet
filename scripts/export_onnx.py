@@ -28,7 +28,7 @@ def main() -> None:
     from blundernet.model import BlunderNet  # noqa: E402
     from blundernet.encode import PLANES  # noqa: E402
 
-    ckpt = torch.load(repo / "checkpoint" / "model.pt", map_location="cpu", weights_only=False)
+    ckpt = torch.load(repo / "checkpoint" / "model.pt", map_location="cpu", weights_only=True)
     state = ckpt.get("model") if isinstance(ckpt, dict) and "model" in ckpt else ckpt
     if hasattr(state, "state_dict"):
         state = state.state_dict()

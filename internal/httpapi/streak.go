@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -73,14 +74,18 @@ func (s *Server) handleStreakStart(w http.ResponseWriter, r *http.Request) {
 		// the rung is one higher. Starting a fresh state here was the second
 		// half of the loop bug: even once the id was cleared, the run would
 		// have restarted at zero.
-		s.nextStreakPuzzle(w, r, user.ID, state)
+		s.nextStreakPuzzle(w, r, user.ID, &state)
 		return
 	}
-	s.nextStreakPuzzle(w, r, user.ID, store.StreakState{Started: time.Now()})
+	s.nextStreakPuzzle(w, r, user.ID, nil)
 }
 
 // nextStreakPuzzle draws the puzzle for the current rung and stores it.
-func (s *Server) nextStreakPuzzle(w http.ResponseWriter, r *http.Request, userID string, state store.StreakState) {
+func (s *Server) nextStreakPuzzle(w http.ResponseWriter, r *http.Request, userID string, before *store.StreakState) {
+	var state store.StreakState
+	if before != nil {
+		state = *before
+	}
 	target := state.RatingFor()
 	seen, err := s.seen.Load(r.Context(), userID)
 	if err != nil {
@@ -99,8 +104,9 @@ func (s *Server) nextStreakPuzzle(w http.ResponseWriter, r *http.Request, userID
 		if ok {
 			state.PuzzleID = p.ID
 			state.Step = 0
-			if err := s.streak.Set(r.Context(), userID, state); err != nil {
-				internalError(w, err)
+			state.Started = time.Now()
+			if err := s.streak.Replace(r.Context(), userID, before, &state); err != nil {
+				gameError(w, err)
 				return
 			}
 			s.writeStreak(w, r, userID, p, state)
@@ -111,13 +117,18 @@ func (s *Server) nextStreakPuzzle(w http.ResponseWriter, r *http.Request, userID
 }
 
 func (s *Server) writeStreak(w http.ResponseWriter, r *http.Request, userID string, p puzzle.Puzzle, state store.StreakState) {
+	position, err := toRankedView(p, state.Step)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
 	best, err := s.puzzles.BestStreak(r.Context(), userID)
 	if err != nil {
 		internalError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, streakView{
-		ID: p.ID, FEN: p.FEN, SetupMove: p.SetupMove(), Color: p.SolverColor(),
+		ID: p.ID, FEN: position.FEN, SetupMove: position.SetupMove, Color: p.SolverColor(),
 		Moves: p.UserMoves(), Step: state.Step, Count: state.Count, Best: best,
 	})
 }
@@ -164,16 +175,17 @@ func (s *Server) handleStreakMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !exists {
-		_ = s.streak.Clear(r.Context(), user.ID)
+		_ = s.streak.Replace(r.Context(), user.ID, &state, nil)
 		httpError(w, http.StatusConflict, "that puzzle is gone")
 		return
 	}
 
 	correct, done := puzzle.Check(p, state.Step, req.UCI)
+	before := state
 	if correct && !done {
 		state.Step += 2
-		if err := s.streak.Set(r.Context(), user.ID, state); err != nil {
-			internalError(w, err)
+		if err := s.streak.Replace(r.Context(), user.ID, &before, &state); err != nil {
+			gameError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, streakMoveResponse{
@@ -182,7 +194,11 @@ func (s *Server) handleStreakMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.puzzles.RecordStreakAttempt(r.Context(), user.ID, p.ID, correct, req.Ms); err != nil {
+	if err := s.puzzles.RecordStreakAttempt(r.Context(), user.ID, p.ID, correct, req.Ms, state.Started); err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			httpError(w, http.StatusConflict, "that attempt was already recorded")
+			return
+		}
 		internalError(w, err)
 		return
 	}
@@ -196,7 +212,7 @@ func (s *Server) handleStreakMove(w http.ResponseWriter, r *http.Request) {
 			internalError(w, err)
 			return
 		}
-		if err := s.streak.Clear(r.Context(), user.ID); err != nil {
+		if err := s.streak.Replace(r.Context(), user.ID, &before, nil); err != nil {
 			slog.Warn("clear streak", "user", user.ID, "err", err)
 		}
 		writeJSON(w, http.StatusOK, streakMoveResponse{
@@ -215,8 +231,8 @@ func (s *Server) handleStreakMove(w http.ResponseWriter, r *http.Request) {
 	state.Count++
 	state.Step = 0
 	state.PuzzleID = ""
-	if err := s.streak.Set(r.Context(), user.ID, state); err != nil {
-		internalError(w, err)
+	if err := s.streak.Replace(r.Context(), user.ID, &before, &state); err != nil {
+		gameError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, streakMoveResponse{

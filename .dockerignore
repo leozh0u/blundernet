@@ -1,5 +1,11 @@
 .git
 .github
+.local
+AGENTS.md
+.env
+.env.*
+engine
+**/__pycache__
 web/node_modules
 web/dist
 loadtest

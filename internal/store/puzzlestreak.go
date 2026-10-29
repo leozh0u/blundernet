@@ -69,31 +69,24 @@ func (s *Streak) Get(ctx context.Context, userID string) (StreakState, bool, err
 	return out, true, nil
 }
 
-func (s *Streak) Set(ctx context.Context, userID string, st StreakState) error {
-	raw, err := json.Marshal(st)
-	if err != nil {
-		return err
-	}
-	return s.rdb.Set(ctx, streakKey(userID), raw, streakTTL).Err()
-}
-
-func (s *Streak) Clear(ctx context.Context, userID string) error {
-	return s.rdb.Del(ctx, streakKey(userID)).Err()
-}
-
 // RecordStreakAttempt writes the attempt without touching any rating.
-func (p *Puzzles) RecordStreakAttempt(ctx context.Context, userID, puzzleID string, solved bool, ms int) error {
+func (p *Puzzles) RecordStreakAttempt(ctx context.Context, userID, puzzleID string, solved bool, ms int, started time.Time) error {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(context.WithoutCancel(ctx))
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO puzzle_attempts (user_id, puzzle_id, solved, ms, mode, hints_used)
-		VALUES ($1, $2, $3, $4, 'streak', 0)`,
-		userID, puzzleID, solved, nullableInt(ms)); err != nil {
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO puzzle_attempts (user_id, puzzle_id, solved, ms, mode, hints_used, attempt_id)
+		VALUES ($1, $2, $3, $4, 'streak', 0, $5)
+		ON CONFLICT (attempt_id) DO NOTHING`,
+		userID, puzzleID, solved, nullableInt(ms), attemptID(userID, puzzleID, started))
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE puzzles

@@ -82,7 +82,8 @@ restore)
   # replaces rather than erroring on a fresh database.
   ssm "set -e
     aws s3 cp s3://$BUCKET/pg/$LATEST /tmp/restore.sql.gz --only-show-errors
-    gunzip -c /tmp/restore.sql.gz | docker exec -i blundernet-postgres-1 psql -U blundernet -d blundernet -q
+    gzip -t /tmp/restore.sql.gz
+    gunzip -c /tmp/restore.sql.gz | docker exec -i blundernet-postgres-1 psql -v ON_ERROR_STOP=1 --single-transaction -U blundernet -d blundernet -q
     rm -f /tmp/restore.sql.gz
     echo restored"
   ;;

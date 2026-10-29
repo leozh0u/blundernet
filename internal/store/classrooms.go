@@ -226,6 +226,11 @@ func (c *Classrooms) Join(ctx context.Context, userID, code string) (*Classroom,
 	}
 	defer tx.Rollback(ctx)
 
+	// Membership limits and removals serialize on the room, not disjoint member rows.
+	if err := tx.QueryRow(ctx, `SELECT id FROM classrooms WHERE id = $1 FOR UPDATE`, room.ID).Scan(&room.ID); err != nil {
+		return nil, err
+	}
+
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO classroom_members (classroom_id, user_id, role)
 		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, room.ID, userID, RoleStudent)
@@ -401,6 +406,11 @@ func (c *Classrooms) Remove(ctx context.Context, classroomID, callerID, targetID
 		return err
 	}
 	defer tx.Rollback(ctx)
+
+	var roomID string
+	if err := tx.QueryRow(ctx, `SELECT id FROM classrooms WHERE id = $1 FOR UPDATE`, classroomID).Scan(&roomID); err != nil {
+		return err
+	}
 
 	tag, err := tx.Exec(ctx,
 		`DELETE FROM classroom_members WHERE classroom_id = $1 AND user_id = $2`,

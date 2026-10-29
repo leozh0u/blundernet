@@ -1,11 +1,69 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
+
+func TestUnsafeBrowserRequestsRequireSameOrigin(t *testing.T) {
+	for _, tc := range []struct {
+		name, origin, site string
+		want               int
+	}{
+		{"same origin", "https://blundernet.com", "same-origin", http.StatusCreated},
+		{"non-browser", "", "", http.StatusCreated},
+		{"foreign origin", "https://evil.example", "", http.StatusForbidden},
+		{"same site subdomain", "https://other.blundernet.com", "same-site", http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, q := newTestServer(t)
+			r := httptest.NewRequest(http.MethodPost, "https://blundernet.com/api/games", strings.NewReader(`{"color":"black"}`))
+			r.Header.Set("Origin", tc.origin)
+			r.Header.Set("Sec-Fetch-Site", tc.site)
+			r.Header.Set("Content-Type", "text/plain")
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status %d, want %d: %s", w.Code, tc.want, w.Body)
+			}
+			if tc.want == http.StatusForbidden && len(q.jobs) != 0 {
+				t.Fatal("rejected request still queued work")
+			}
+		})
+	}
+}
+
+func TestGameSocketRejectsOversizedIncomingMessage(t *testing.T) {
+	s, _ := newTestServer(t)
+	rec := do(t, s, http.MethodPost, "/api/games", `{}`)
+	var state State
+	if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(s)
+	defer server.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/api/games/"+state.ID+"/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := conn.ReadMessage(); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(strings.Repeat("x", 2048))); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := conn.ReadMessage(); !websocket.IsCloseError(err, websocket.CloseMessageTooBig) {
+		t.Fatalf("oversized frame was not refused: %v", err)
+	}
+}
 
 func TestSecurityHeadersOnEveryResponse(t *testing.T) {
 	s, _ := newTestServer(t)

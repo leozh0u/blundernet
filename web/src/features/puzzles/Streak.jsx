@@ -7,6 +7,7 @@ import { PositionText, BlindfoldButton } from '../../components/Position.jsx'
 import { auth } from '../account/auth.js'
 import GuestNote from '../../components/GuestNote.jsx'
 import BoardOverlay from '../../components/BoardOverlay.jsx'
+import MoveInput from '../../components/MoveInput.jsx'
 
 // Streak. Puzzles get harder until you miss one, and then the run is over.
 // No hints, no second try, no rating: the only thing kept is the best run.
@@ -31,16 +32,16 @@ export default function Streak() {
   const [error, setError] = useState('')
   const startedAt = useRef(0)
   const timers = useRef([])
+  const step = useRef(0)
 
   const later = useCallback((fn, ms) => {
     timers.current.push(setTimeout(fn, ms))
   }, [])
-  useEffect(
-    () => () => {
-      timers.current.forEach(clearTimeout)
-    },
-    [],
-  )
+  const clearLater = useCallback(() => {
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+  }, [])
+  useEffect(() => clearLater, [clearLater])
 
   // Who is playing, once, so the panel can say whether the best run survives
   // closing the tab. A guest streak is real and rated and kept, just kept in a
@@ -51,16 +52,23 @@ export default function Streak() {
 
   const present = useCallback(
     (p) => {
+      clearLater()
+      step.current = p.step || 0
       setPuzzle(p)
       setSelected(null)
       setCount(p.count)
       setBest(p.best)
-      setPhase('setup')
       setVerdict(null)
       // A different puzzle. Nothing on the old board relates to the new one,
       // so it appears rather than sliding into place.
       motion.jump(0)
       setBoard(new Chess(p.fen))
+      startedAt.current = Date.now()
+      if (!p.setup_move) {
+        setPhase('solving')
+        return
+      }
+      setPhase('setup')
       later(() => {
         const after = new Chess(p.fen)
         after.move({
@@ -75,30 +83,39 @@ export default function Streak() {
         startedAt.current = Date.now()
       }, 600)
     },
-    [later, motion.jump, motion.move],
+    [later, motion.jump, motion.move, clearLater],
   )
 
   const start = useCallback(async () => {
+    clearLater()
+    setPhase('loading')
     setError('')
-    const res = await fetch('/api/puzzles/streak', { method: 'POST' })
-    if (!res.ok) {
+    try {
+      const res = await fetch('/api/puzzles/streak', { method: 'POST' })
+      if (!res.ok) throw new Error()
+      present(await res.json())
+    } catch {
       setError('No puzzle came back. Try again in a moment.')
-      return
+      setPhase('error')
     }
-    present(await res.json())
-  }, [present])
+  }, [present, clearLater])
 
   const send = async (uci, positionBefore, afterMine) => {
-    const res = await fetch('/api/puzzles/streak/move', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uci, ms: Date.now() - startedAt.current }),
-    })
-    if (!res.ok) {
-      setError('That move could not be sent. Reload to pick the run back up.')
+    let body
+    try {
+      const res = await fetch('/api/puzzles/streak/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uci, ms: Date.now() - startedAt.current }),
+      })
+      if (!res.ok) throw new Error()
+      body = await res.json()
+    } catch {
+      setBoard(positionBefore)
+      setPhase('error')
+      setError('That move could not be confirmed. Resume the run to check its position.')
       return
     }
-    const body = await res.json()
     // This used to be set and never cleared, anywhere in the file, so the
     // mark stayed on the board for the rest of the run and ended up pinned to
     // a square belonging to a puzzle two positions ago.
@@ -116,6 +133,8 @@ export default function Streak() {
         })
         motion.move()
         setBoard(answered)
+        step.current += 2
+        setPhase('solving')
       }, 350)
       return
     }
@@ -130,7 +149,7 @@ export default function Streak() {
     if (body.solution) {
       let running = positionBefore
       let delay = 500
-      for (const uciMove of body.solution.slice(stepOf(positionBefore))) {
+      for (const uciMove of body.solution.slice(step.current)) {
         const snapshot = new Chess(running.fen())
         try {
           snapshot.move({
@@ -152,8 +171,6 @@ export default function Streak() {
     }
   }
 
-  const stepOf = (position) => Math.max(0, position.history().length - 1)
-
   const tryMove = (from, to) => {
     if (phase !== 'solving' || !board) return false
     const probe = new Chess(board.fen())
@@ -164,6 +181,7 @@ export default function Streak() {
       return false
     }
     if (!mv) return false
+    setPhase('sending')
     setSelected(null)
     const before = new Chess(board.fen())
     setBoard(probe)
@@ -232,8 +250,8 @@ export default function Streak() {
             boardOrientation={puzzle?.color || 'white'}
             arePiecesDraggable={phase === 'solving'}
             customBoardStyle={{ borderRadius: '6px' }}
-            customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-            customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
             customSquareStyles={squareStyles}
           />
           )}
@@ -245,6 +263,8 @@ export default function Streak() {
       <aside className="panel">
         <div className={`state ${phase === 'over' ? 'wrong' : 'yours'}`}>
           {phase === 'setup' && <span className="head">Watch the blunder</span>}
+          {phase === 'loading' && <span className="head">Finding a puzzle</span>}
+          {phase === 'sending' && <span className="head">Checking your move</span>}
           {phase === 'solving' && puzzle && (
             <span className="head">
               Your move as {puzzle.color === 'white' ? 'White' : 'Black'}
@@ -254,7 +274,7 @@ export default function Streak() {
         </div>
 
         <div className="record">
-          <h3>Streak</h3>
+          <h2>Streak</h2>
           <dl className="meta">
             <div>
               <dt>This run</dt>
@@ -275,10 +295,12 @@ export default function Streak() {
             </button>
           </div>
         )}
+        {phase === 'error' && <button className="wide" onClick={start}>Resume run</button>}
         {/* Available while solving, since playing a streak blindfold is the
             whole point of having it here. */}
-        {phase === 'solving' && (
+        {(phase === 'solving' || phase === 'sending') && (
           <div className="during">
+            <MoveInput onMove={tryMove} disabled={phase !== 'solving'} />
             <BlindfoldButton on={blindfold.on} onToggle={blindfold.toggle} />
           </div>
         )}

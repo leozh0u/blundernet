@@ -62,6 +62,7 @@ func (p *Puzzles) Record(ctx context.Context, a Attempt) error {
 // second outcome should count.
 func (p *Puzzles) Failed(ctx context.Context, userID string, limit int) ([]string, error) {
 	rows, err := p.pool.Query(ctx, `
+		SELECT puzzle_id, attempted_at FROM (
 		SELECT DISTINCT ON (a.puzzle_id) a.puzzle_id, a.attempted_at
 		FROM puzzle_attempts a
 		WHERE a.user_id = $1
@@ -72,6 +73,8 @@ func (p *Puzzles) Failed(ctx context.Context, userID string, limit int) ([]strin
 		        AND b.solved AND b.attempted_at > a.attempted_at
 		  )
 		ORDER BY a.puzzle_id, a.attempted_at DESC
+		) AS latest
+		ORDER BY attempted_at DESC, puzzle_id
 		LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, err

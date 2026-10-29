@@ -73,10 +73,12 @@ type Stockfish struct {
 	// review takes eight seconds or eighty.
 	moveTime time.Duration
 	// broken is set when a read timed out. The pipe is then mid-answer and
-	// there is no safe way to resynchronise, so every later call fails fast
-	// rather than reading somebody else's reply.
+	// there is no safe way to resynchronise, so the next call starts a fresh process.
 	broken bool
+	opts   StockfishOptions
 }
+
+var startupTimeout = 5 * time.Second
 
 // SetMoveTime changes the per position budget. Callers that know how many
 // positions they are about to ask about use this to keep the whole job inside
@@ -139,13 +141,29 @@ func NewStockfish(opts StockfishOptions) (*Stockfish, error) {
 		return nil, fmt.Errorf("start %s: %w", opts.Path, err)
 	}
 
-	s := &Stockfish{cmd: cmd, in: in, out: bufio.NewReader(out), moveTime: opts.MoveTime}
-
-	if err := s.send("uci"); err != nil {
+	s := &Stockfish{cmd: cmd, in: in, out: bufio.NewReader(out), moveTime: opts.MoveTime, opts: opts}
+	done := make(chan error, 1)
+	go func() { done <- s.configure(opts) }()
+	select {
+	case err = <-done:
+	case <-time.After(startupTimeout):
+		err = fmt.Errorf("engine startup exceeded %s", startupTimeout)
+	}
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = in.Close()
+		_ = cmd.Wait()
 		return nil, err
 	}
+	return s, nil
+}
+
+func (s *Stockfish) configure(opts StockfishOptions) error {
+	if err := s.send("uci"); err != nil {
+		return err
+	}
 	if err := s.await("uciok"); err != nil {
-		return nil, err
+		return err
 	}
 	for _, opt := range []string{
 		fmt.Sprintf("setoption name Threads value %d", opts.Threads),
@@ -157,13 +175,10 @@ func NewStockfish(opts StockfishOptions) (*Stockfish, error) {
 		fmt.Sprintf("setoption name MultiPV value %d", opts.MultiPV),
 	} {
 		if err := s.send(opt); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	if err := s.ready(); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return s.ready()
 }
 
 func (s *Stockfish) send(line string) error {
@@ -202,14 +217,28 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 	if s.closed {
 		return Analysis{}, errors.New("engine is closed")
 	}
+	if err := ctx.Err(); err != nil {
+		return Analysis{}, err
+	}
 	if s.broken {
-		return Analysis{}, errors.New("engine is out of sync")
+		_ = s.cmd.Process.Kill()
+		_ = s.in.Close()
+		_ = s.cmd.Wait()
+		opts := s.opts
+		opts.MoveTime = s.moveTime
+		next, err := NewStockfish(opts)
+		if err != nil {
+			return Analysis{}, fmt.Errorf("restart engine: %w", err)
+		}
+		s.cmd, s.in, s.out, s.broken = next.cmd, next.in, next.out, false
 	}
 
 	if err := s.send("position fen " + fen); err != nil {
+		s.broken = true
 		return Analysis{}, err
 	}
 	if err := s.send(fmt.Sprintf("go movetime %d", s.moveTime.Milliseconds())); err != nil {
+		s.broken = true
 		return Analysis{}, err
 	}
 
@@ -224,13 +253,14 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 		err error
 	}
 	done := make(chan result, 1)
+	reader := s.out
 	go func() {
 		// Keyed by MultiPV rank rather than appended, because the engine
 		// reports each rank again at every new depth and only the last report
 		// of each is its final opinion.
 		lines := map[int]Line{}
 		for {
-			line, err := s.out.ReadString('\n')
+			line, err := reader.ReadString('\n')
 			if err != nil {
 				done <- result{err: err}
 				return
@@ -241,7 +271,12 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 			}
 			if best, ok := strings.CutPrefix(line, "bestmove "); ok {
 				var a Analysis
-				a.Best = strings.Fields(best)[0]
+				fields := strings.Fields(best)
+				if len(fields) == 0 {
+					done <- result{err: errors.New("engine returned an empty bestmove")}
+					return
+				}
+				a.Best = fields[0]
 				if first, ok := lines[1]; ok {
 					a.CP, a.Mate = first.CP, first.Mate
 				}
@@ -263,6 +298,7 @@ func (s *Stockfish) Analyse(ctx context.Context, fen string) (Analysis, error) {
 	limit := 10*s.moveTime + 5*time.Second
 	select {
 	case r := <-done:
+		s.broken = r.err != nil
 		return r.a, r.err
 	case <-ctx.Done():
 		s.broken = true

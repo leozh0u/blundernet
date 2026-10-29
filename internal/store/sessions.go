@@ -86,7 +86,12 @@ func (s *Sessions) Lookup(ctx context.Context, token string) (string, error) {
 	}
 	// Best effort. A failed refresh just means the session expires on its
 	// original schedule.
-	_ = s.rdb.Expire(ctx, key, s.ttl).Err()
+	pipe := s.rdb.TxPipeline()
+	pipe.Expire(ctx, key, s.ttl)
+	// The revocation index must live at least as long as every active token.
+	pipe.SAdd(ctx, userSessionsKey(userID), key)
+	pipe.Expire(ctx, userSessionsKey(userID), s.ttl)
+	_, _ = pipe.Exec(ctx)
 	return userID, nil
 }
 
@@ -110,17 +115,13 @@ func (s *Sessions) Destroy(ctx context.Context, token string) error {
 
 // DestroyAllFor signs a user out everywhere. Used by account recovery, where
 // the whole point is that somebody else may be holding a live session.
+var revokeSessions = redis.NewScript(`
+local keys = redis.call('SMEMBERS', KEYS[1])
+for _, key in ipairs(keys) do redis.call('DEL', key) end
+return redis.call('DEL', KEYS[1])
+`)
+
 func (s *Sessions) DestroyAllFor(ctx context.Context, userID string) error {
-	idx := userSessionsKey(userID)
-	keys, err := s.rdb.SMembers(ctx, idx).Result()
-	if err != nil {
-		return err
-	}
-	pipe := s.rdb.TxPipeline()
-	if len(keys) > 0 {
-		pipe.Del(ctx, keys...)
-	}
-	pipe.Del(ctx, idx)
-	_, err = pipe.Exec(ctx)
-	return err
+	// A new session cannot slip between reading the index and deleting it.
+	return revokeSessions.Run(ctx, s.rdb, []string{userSessionsKey(userID)}).Err()
 }

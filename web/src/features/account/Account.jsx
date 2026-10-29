@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { auth, tidyRecoveryCode } from './auth.js'
 import RecoveryCode from './RecoveryCode.jsx'
+import { useDialog } from '../../lib/dialog.js'
 
 // The account strip. Everything on the site works signed out, so this never
 // blocks anything: it names you, links to the page where the numbers are, and
@@ -114,6 +115,7 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
   // set the dialog shows nothing else: it is the only moment the plaintext
   // exists, and closing over it loses the account.
   const [issued, setIssued] = useState(null)
+  const dialog = useDialog(true, issued ? undefined : onClose)
   const signingUp = mode === 'signup'
   const recovering = mode === 'recover'
 
@@ -160,7 +162,7 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
   if (issued) {
     return (
       <div className="modal-back">
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal" ref={dialog} role="dialog" aria-modal="true" aria-label={issued.heading} onClick={(e) => e.stopPropagation()}>
           <RecoveryCode
             code={issued.code}
             heading={issued.heading}
@@ -177,7 +179,7 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
 
   return (
     <div className="modal-back" onClick={onClose}>
-      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form className="modal" ref={dialog} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <h2>{title}</h2>
 
         {signingUp && hasProgress && (
@@ -197,7 +199,6 @@ function AuthDialog({ mode, hasProgress, onClose, onDone, onSwitch }) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            autoFocus
             required
           />
         </label>

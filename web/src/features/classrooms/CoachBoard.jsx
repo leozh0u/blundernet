@@ -251,8 +251,8 @@ export default function CoachBoard({ onAsk, classroomID }) {
               dropOffBoardAction="trash"
               animationDuration={0}
               customBoardStyle={{ borderRadius: '6px' }}
-              customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-              customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
             />
             )}
             {/* The selected square is drawn on the overlay the hints already
@@ -298,7 +298,7 @@ export default function CoachBoard({ onAsk, classroomID }) {
                 maxLength={140}
                 aria-label="What to ask the class"
               />
-              <button disabled={asking}>Ask the class</button>
+              <button className="action" disabled={asking}>Ask the class</button>
             </form>
           )}
 

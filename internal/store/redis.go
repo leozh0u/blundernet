@@ -23,8 +23,9 @@ var (
 
 const gameTTL = 24 * time.Hour
 
-// casScript writes the game only if the stored ply still matches what the
-// caller read (-1 = key must not exist yet). This is the same
+// casScript writes only if the ply and revision still match what the caller
+// read (-1 = key must not exist yet). Joins and resignations do not change ply.
+// This is the same
 // check-and-set-in-one-atomic-step idea as a conditional UPDATE in SQL,
 // done in Lua because Redis has no WHERE clause.
 var casScript = redis.NewScript(`
@@ -35,8 +36,8 @@ if expected == -1 then
 elseif not cur then
   return 0
 else
-  local ply = cjson.decode(cur)['ply']
-  if ply ~= expected then return 0 end
+  local state = cjson.decode(cur)
+  if state['ply'] ~= expected or (state['revision'] or 0) ~= tonumber(ARGV[4]) then return 0 end
 end
 redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
 return 1
@@ -56,24 +57,27 @@ func (s *Games) Create(ctx context.Context, g *game.Game) error {
 	return s.write(ctx, g, -1)
 }
 
-// Update saves g, requiring that the stored copy is still at expectedPly.
+// Update saves g if neither its ply nor its revision changed since the read.
 func (s *Games) Update(ctx context.Context, g *game.Game, expectedPly int) error {
 	return s.write(ctx, g, expectedPly)
 }
 
 func (s *Games) write(ctx context.Context, g *game.Game, expectedPly int) error {
-	raw, err := json.Marshal(g)
+	next := *g
+	next.Revision++
+	raw, err := json.Marshal(&next)
 	if err != nil {
 		return err
 	}
 	ok, err := casScript.Run(ctx, s.rdb, []string{key(g.ID)},
-		expectedPly, raw, int(gameTTL.Seconds())).Int()
+		expectedPly, raw, int(gameTTL.Seconds()), g.Revision).Int()
 	if err != nil {
 		return fmt.Errorf("redis cas: %w", err)
 	}
 	if ok != 1 {
 		return ErrConflict
 	}
+	g.Revision = next.Revision
 	return nil
 }
 
@@ -114,7 +118,11 @@ func (s *Games) Subscribe(ctx context.Context, gameID string) <-chan []byte {
 				if !ok {
 					return
 				}
-				out <- []byte(msg.Payload)
+				select {
+				case out <- []byte(msg.Payload):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()

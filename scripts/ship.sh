@@ -12,6 +12,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SERVICES="${*:-api}"
+for svc in $SERVICES; do
+  case "$svc" in api|worker) ;; *) echo "unknown service: $svc" >&2; exit 2 ;; esac
+done
 TF_DIR=deploy/demo
 PLATFORM=linux/arm64        # the box is Graviton, so images have to be arm64
 AWS_REGION=us-east-1
@@ -23,8 +26,10 @@ AWS_REGION=us-east-1
 # CLI looks for them. Without this docker quietly falls back to the legacy
 # builder, which does not understand --provenance, and the build fails on a
 # flag that works fine by hand.
-export DOCKER_CONFIG=/tmp/blundernet-docker
-mkdir -p "$DOCKER_CONFIG"
+export DOCKER_CONFIG
+DOCKER_CONFIG=$(mktemp -d -t blundernet-docker)
+PARAMS=""
+trap 'rm -rf "$DOCKER_CONFIG"; [ -z "$PARAMS" ] || rm -f "$PARAMS"' EXIT
 if [ -d "$HOME/.docker/cli-plugins" ] && [ ! -e "$DOCKER_CONFIG/cli-plugins" ]; then
   ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG/cli-plugins"
 fi
@@ -60,7 +65,6 @@ done
 # the previous image. Ask the box what it is actually running.
 INSTANCE=$(terraform -chdir="$TF_DIR" output -raw instance_id)
 PARAMS=$(mktemp -t blundernet-ship)
-trap 'rm -f "$PARAMS"' EXIT
 
 for svc in $SERVICES; do
   eval "want=\$want_$svc"

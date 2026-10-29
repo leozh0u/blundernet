@@ -57,6 +57,31 @@ type testSource struct {
 	i    int
 }
 
+func TestRankedViewResumesAtCurrentPosition(t *testing.T) {
+	p := puzzle.Puzzle{
+		ID: "resume", FEN: "3q1r1k/pppb1ppp/8/4N3/8/8/PPPP1PPP/R1BQ1RK1 b - - 0 1",
+		Moves: []string{"d7c6", "e5f7", "f8f7", "d1e2"},
+	}
+	initial, err := toRankedView(p, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.FEN != p.FEN || initial.SetupMove != "d7c6" {
+		t.Fatalf("initial animation lost: %+v", initial)
+	}
+	resumed, err := toRankedView(p, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "3q3k/ppp2rpp/2b5/8/8/8/PPPP1PPP/R1BQ1RK1 w - - 0 3"
+	if resumed.FEN != want || resumed.SetupMove != "" || resumed.Step != 2 {
+		t.Fatalf("resumed position = %+v, want %s without setup", resumed, want)
+	}
+	if _, err := toRankedView(p, 9); err == nil {
+		t.Fatal("invalid stored step accepted")
+	}
+}
+
 func (s *testSource) Next() bool            { s.i++; return s.i <= len(s.rows) }
 func (s *testSource) Puzzle() puzzle.Puzzle { return s.rows[s.i-1] }
 func (s *testSource) Err() error            { return nil }

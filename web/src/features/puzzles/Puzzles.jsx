@@ -6,6 +6,7 @@ import { sound } from '../../lib/sound.js'
 import { puzzleLine, useAnswerLine, MoveNavigator } from './answerline.jsx'
 import { useBoardMotion, useBoardWidth, useBlindfold } from '../../lib/board.js'
 import { PositionText, Announce, BlindfoldButton } from '../../components/Position.jsx'
+import MoveInput from '../../components/MoveInput.jsx'
 
 // Learning mode. A drill, not a test: filter for exactly what you want to
 // practise, and nothing here moves a rating. The filter lives in the URL, so
@@ -131,6 +132,7 @@ export default function Puzzles({ shared }) {
   // used to appear only after a miss, but stepping back to see why a move
   // works is just as useful mid-solve and after a win.
   const [revealed, setRevealed] = useState(false)
+  const [matingLine, setMatingLine] = useState(null)
   // Asking to see the puzzle's rating and length before solving it. Per
   // puzzle, not a setting: the answer to "how hard is this one" is usually
   // wanted about one puzzle in ten.
@@ -150,6 +152,8 @@ export default function Puzzles({ shared }) {
   const [frame, boardWidth] = useBoardWidth()
   const startedAt = useRef(0)
   const timers = useRef([])
+  const loadVersion = useRef(0)
+  const refilling = useRef(false)
 
   // Every delayed board update is cancellable, because moving on to the next
   // puzzle while the opponent's reply is still pending would otherwise play
@@ -159,8 +163,9 @@ export default function Puzzles({ shared }) {
   const over = phase === 'solved' || phase === 'failed'
   const metaOpen = over || metaShown
   const line = useMemo(
-    () => puzzleLine(puzzle, over || revealed ? puzzle?.solution?.length ?? 0 : step),
-    [puzzle, step, over, revealed],
+    () => puzzleLine(matingLine ? { ...puzzle, solution: matingLine } : puzzle,
+      over || revealed ? matingLine?.length ?? puzzle?.solution?.length ?? 0 : step),
+    [puzzle, step, over, revealed, matingLine],
   )
   const nav = useAnswerLine(line, { startAtEnd: true })
   // Pieces only move from the live position. Dragging while reading history
@@ -188,7 +193,10 @@ export default function Puzzles({ shared }) {
     timers.current.forEach(clearTimeout)
     timers.current = []
   }, [])
-  useEffect(() => clearLater, [clearLater])
+  useEffect(() => () => {
+    clearLater()
+    loadVersion.current += 1
+  }, [clearLater])
 
   // The wrong-answer list is a different query, not a filter: it is driven by
   // your attempts rather than by the corpus, so it ignores the filter bar
@@ -229,6 +237,7 @@ export default function Puzzles({ shared }) {
       // board keeps following the old line's cursor instead of the new
       // position, and the arrow keys stay bound to a puzzle that is gone.
       setRevealed(false)
+      setMatingLine(null)
       setMetaShown(false)
       // The new puzzle's position has nothing to do with the one being
       // replaced, so it appears rather than sliding. The blunder that sets it
@@ -260,10 +269,15 @@ export default function Puzzles({ shared }) {
 
   const load = useCallback(
     async (f) => {
+      const version = ++loadVersion.current
+      clearLater()
+      refilling.current = false
+      setQueue([])
       setPhase('loading')
       setError('')
       try {
         const batch = await fetchBatch(f)
+        if (version !== loadVersion.current) return
         setList(source === 'search' ? [] : batch)
         if (batch.length === 0) {
           setPuzzle(null)
@@ -273,20 +287,24 @@ export default function Puzzles({ shared }) {
         setQueue(batch.slice(1))
         present(batch[0])
       } catch (e) {
+        if (version !== loadVersion.current) return
         setError(e.message)
         setPhase('empty')
       }
     },
-    [fetchBatch, present, source],
+    [fetchBatch, present, source, clearLater],
   )
 
   useEffect(() => {
     // A shared link names one puzzle, so that is the whole batch.
     if (shared) {
+      const version = ++loadVersion.current
+      clearLater()
       setPhase('loading')
       fetch(`/api/puzzles/${shared}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((p) => {
+          if (version !== loadVersion.current) return
           if (p) {
             setQueue([])
             present(p)
@@ -295,13 +313,15 @@ export default function Puzzles({ shared }) {
             setPhase('empty')
           }
         })
-        .catch(() => setPhase('empty'))
+        .catch(() => {
+          if (version === loadVersion.current) setPhase('empty')
+        })
       return
     }
     load(filter)
     // Only on mount and on an explicit filter change, which calls load itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [shared])
 
   // The opening list is the top forty by size, served from the same summary
   // the sampler uses, so nothing in the menu can come back empty.
@@ -333,15 +353,22 @@ export default function Puzzles({ shared }) {
       setQueue(rest)
       present(head)
       // Refill in the background so the last puzzle of a batch does not stall.
-      if (rest.length <= 2) {
+      if (source === 'search' && rest.length <= 2 && !refilling.current) {
+        const version = loadVersion.current
+        refilling.current = true
         fetchBatch(filter)
-          .then((more) => setQueue((q) => [...q, ...more]))
+          .then((more) => {
+            if (version === loadVersion.current) setQueue((q) => [...q, ...more])
+          })
           .catch(() => {})
+          .finally(() => {
+            if (version === loadVersion.current) refilling.current = false
+          })
       }
       return
     }
     await load(filter)
-  }, [queue, filter, present, load, fetchBatch])
+  }, [queue, filter, present, load, fetchBatch, source])
 
   // Clicking an entry opens it and makes the rest of the list the queue, so
   // "next" carries on from where you jumped rather than from where you were.
@@ -464,7 +491,16 @@ export default function Puzzles({ shared }) {
       return true
     }
 
-    playSolutionMove()
+    if (probe.isCheckmate()) {
+      setMatingLine([...puzzle.solution.slice(0, step), uciOf(mv)])
+      setBoard(probe)
+      setStep(step + 1)
+      setPhase('solved')
+      sound.solve()
+      record(puzzle.id, true, hintsUsed.current)
+    } else {
+      playSolutionMove()
+    }
     return true
   }
 
@@ -492,6 +528,7 @@ export default function Puzzles({ shared }) {
       record(puzzle.id, true, hintsUsed.current)
       return
     }
+    setPhase('replying')
     const reply = puzzle.solution[nextStep]
     later(() => {
       const answered = new Chess(played.fen())
@@ -502,13 +539,14 @@ export default function Puzzles({ shared }) {
       })
       setBoard(answered)
       setStep(nextStep + 1)
+      setPhase('solving')
     }, 350)
     setStep(nextStep)
   }
 
   // The ladder: light the piece, point at the square, then play it.
   const takeHint = () => {
-    if (phase !== 'solving' || !puzzle || !board) return
+    if (!live || phase !== 'solving' || !puzzle || !board) return
     hintsUsed.current += 1
     if (hintLevel < 2) {
       setHintLevel(hintLevel + 1)
@@ -782,8 +820,8 @@ export default function Puzzles({ shared }) {
                 boardOrientation={puzzle?.color || 'white'}
                 arePiecesDraggable={live && phase === 'solving'}
                 customBoardStyle={{ borderRadius: '6px' }}
-                customDarkSquareStyle={{ backgroundColor: '#567d9f' }}
-                customLightSquareStyle={{ backgroundColor: '#e6ecf3' }}
+                customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+                customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
                 customSquareStyles={squareStyles}
               />
               )}
@@ -801,6 +839,7 @@ export default function Puzzles({ shared }) {
             <div className={`state ${phase === 'failed' ? 'wrong' : 'yours'}`}>
               {phase === 'loading' && <span className="head">Finding a puzzle</span>}
               {phase === 'setup' && <span className="head">Watch the blunder</span>}
+              {phase === 'replying' && <span className="head">Their reply</span>}
               {/* "Your move as White" rather than "White to play". The line
                   above it talks to you, and following an instruction with a
                   spectator's caption about the board reads as two different
@@ -824,7 +863,7 @@ export default function Puzzles({ shared }) {
             {puzzle && (
               <div className="record">
                 <div className="record-head">
-                  <h3>This puzzle</h3>
+                  <h2>This puzzle</h2>
                   <button className="star word" onClick={share} title="Copy a link to this puzzle">
                     {copied ? 'copied' : 'link'}
                   </button>
@@ -917,12 +956,13 @@ export default function Puzzles({ shared }) {
               </div>
             )}
 
-            {phase === 'solving' && (
+            {(phase === 'solving' || phase === 'replying') && (
               <div className="during">
-                <button className="wide" onClick={takeHint}>
+                <MoveInput onMove={tryMove} disabled={!live || phase !== 'solving'} />
+                <button className="wide" onClick={takeHint} disabled={!live || phase !== 'solving'}>
                   {hintLevel === 0 ? 'Hint' : hintLevel === 1 ? 'Show where' : 'Play it'}
                 </button>
-                <button className="ghost wide" onClick={showSolution}>
+                <button className="ghost wide" onClick={showSolution} disabled={phase !== 'solving'}>
                   Show solution
                 </button>
                 <button className="ghost wide" onClick={next}>

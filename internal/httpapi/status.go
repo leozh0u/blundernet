@@ -111,6 +111,12 @@ func (s *Server) status(ctx context.Context) Status {
 		// declining to act twice, so they read better as one number.
 		st.Instance.JobsDeduped = deduped
 	}
+	workerCheck := Check{Name: "workers", OK: st.Workers > 0}
+	if !workerCheck.OK {
+		workerCheck.Note = "no engine worker reporting"
+		st.Degraded = true
+	}
+	st.Checks = append(st.Checks, workerCheck)
 	// No requests yet is not a violation: zero out of zero is not an error
 	// rate, so the target holds until there is something to divide by.
 	st.Instance.MeetsErrorSLO = true
